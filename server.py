@@ -18,7 +18,6 @@ import threading
 
 BASE_DIR = Path(__file__).resolve().parent
 GRAPH_DIR = BASE_DIR / "graph"
-CATALOG_PATH = BASE_DIR / "data" / "blueprints" / "depth2_catalog.json"
 
 
 class GraphRequestHandler(SimpleHTTPRequestHandler):
@@ -387,7 +386,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": str(e)})
 
     def _handle_expand_node(self, payload: dict):
-        """Expand node children from depth2_catalog.json upon returning to it."""
+        """Acknowledge expansion of node children directly from disk."""
         raw_path = payload.get("path", "")
 
         try:
@@ -402,49 +401,13 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 node_data = json.load(f)
 
             node_id = node_data.get("id", node_dir.name)
+            children = node_data.get("children", [])
 
-            if not CATALOG_PATH.exists():
-                self._send_json(404, {"error": "Catalog file not found"})
-                return
-
-            with open(CATALOG_PATH, "r", encoding="utf-8") as f:
-                catalog = json.load(f)
-
-            track_modules = catalog.get(node_id, [])
-            if not track_modules:
-                self._send_json(404, {"error": f"No pre-configured modules for track '{node_id}'"})
-                return
-
-            # Rule: Adding new children converts parent from completed to in-progress
-            node_data["status"] = "in-progress"
-            children = node_data.setdefault("children", [])
-
-            created_modules = []
-            for item in track_modules:
-                mid = item["id"]
-                if mid not in children:
-                    children.append(mid)
-
-                mod_dir = node_dir / mid
-                mod_dir.mkdir(parents=True, exist_ok=True)
-
-                with open(mod_dir / "node.json", "w", encoding="utf-8") as f:
-                    json.dump(item["metadata"], f, indent=2, ensure_ascii=False)
-
-                with open(mod_dir / "summary.md", "w", encoding="utf-8") as f:
-                    f.write(item["summary"])
-
-                created_modules.append(mid)
-
-            with open(node_json_path, "w", encoding="utf-8") as f:
-                json.dump(node_data, f, indent=2, ensure_ascii=False)
-
-            print(f"[Node Expanded]: {node_id} expanded with {len(created_modules)} children")
             self._send_json(200, {
                 "success": True,
-                "message": f"Expanded {len(created_modules)} child stations under {node_id}",
-                "children": created_modules,
-                "nodeStatus": "in-progress"
+                "message": f"Node '{node_id}' has {len(children)} child stations on disk",
+                "children": children,
+                "nodeStatus": node_data.get("status", "in-progress")
             })
         except Exception as e:
             self._send_json(400, {"error": str(e)})
@@ -465,7 +428,7 @@ def run_server(port=8000, open_browser=True):
 
     url = f"http://localhost:{port}"
     print("\n" + "=" * 64)
-    print(" ⚡ CAREER KNOWLEDGE GRAPH SERVER (Python 3.14)")
+    print(" [+] CAREER KNOWLEDGE GRAPH SERVER (Python 3.14)")
     print("=" * 64)
     print(f" Serving workspace at : {BASE_DIR}")
     print(f" Graph directory      : {GRAPH_DIR}")

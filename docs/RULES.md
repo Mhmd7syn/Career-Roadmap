@@ -37,11 +37,12 @@
   - Leaf stations provide direct `[ ➔ Next in Branch ]` navigation to the next sibling upon completion.
   - Displays the global BFS queue checkpoint so the user can easily toggle or return to global breadth.
 
-## 8. Node View Header Actions
-- Header action buttons sit above child road lines:
-  - `[ ℹ️ Node Info & Details ]`: Drawer with metadata, concepts, recall prompt, and status.
-  - `[ 📝 Node Summary & Notes ]`: Rendered markdown viewer and in-browser disk editor.
-- Clicking child road cards navigates down recursively.
+## 8. Focused Local Graph Canvas & Splitting Animation
+- **Local Sub-Graph Architecture:** View shows strictly the active parent node connected to its direct child stations (avoiding slow, complex full-graph pan/zoom engines).
+- **Active Parent Station:** Top-center anchor with a 1-click status cycle pill (`To Do` → `In Progress` → `Done`), bold title, and two essential tools: `[ 📝 Summary ]` (markdown notes) and `[ ℹ️ Info ]` (drawer).
+- **Brief & Direct Child Stations:** Clean station nodes with status dots and station titles. Zero descriptions or verbose paragraphs polluting the view.
+- **Node Splitting & Moving Animation:** Clicking a child node smoothly glides it into the parent anchor while previous siblings dissolve; new child stations split out from the parent with staggered spring elasticity.
+- **Direct Leaf Learning Dock:** Leaf stations surface direct actions (`[ 📝 Notes ]`, `[ ✓ Mark Done ]`, `[ ➔ Next Sibling ]`, `[ ➕ Expand ]`).
 
 ## 9. Anti-Pollution & Direct Communication
 - **Minimal View:** Zero unnecessary text, verbose instructional paragraphs, or decorative emojis polluting the UI.

@@ -1,0 +1,17 @@
+{
+  "id": "swe-databases",
+  "title": "Databases & Persistent Storage",
+  "badge": "SWE-02",
+  "depth": 2,
+  "description": "PostgreSQL schema modeling, indexing (B-Tree/GIN), ACID transactions, and Redis caching.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "Use The Index, Luke!",
+      "url": "https://use-the-index-luke.com/"
+    }
+  ],
+  "concept": "The database is almost always the scalability bottleneck in production; proper schema design and indexing are mandatory.",
+  "activeRecall": "Explain why a B-Tree index helps range queries and what happens when an index is added to an existing table."
+}

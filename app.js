@@ -151,10 +151,32 @@
 
   function getNode(nodeId) {
     if (graphManifest[nodeId] && graphManifest[nodeId].metadata) {
-      return graphManifest[nodeId].metadata;
+      const m = graphManifest[nodeId].metadata;
+      if (!m.children) m.children = [];
+      return m;
     }
-    if (window.RoadmapRegistry && window.RoadmapRegistry[nodeId]) {
-      return window.RoadmapRegistry[nodeId];
+    if (window.RoadmapRegistry) {
+      if (window.RoadmapRegistry[nodeId]) {
+        const reg = window.RoadmapRegistry[nodeId];
+        if (!reg.children && reg.stations) {
+          reg.children = reg.stations.map(s => s.id || s.targetRoadmapId).filter(Boolean);
+        }
+        if (!reg.children) reg.children = [];
+        return reg;
+      }
+      for (const parentId of Object.keys(window.RoadmapRegistry)) {
+        const pNode = window.RoadmapRegistry[parentId];
+        if (pNode && pNode.stations) {
+          const match = pNode.stations.find(s => s.id === nodeId);
+          if (match) {
+            if (!match.children && match.stations) {
+              match.children = match.stations.map(s => s.id || s.targetRoadmapId).filter(Boolean);
+            }
+            if (!match.children) match.children = [];
+            return match;
+          }
+        }
+      }
     }
     return null;
   }
@@ -385,72 +407,93 @@
   }
 
   function updateNextUpBanner() {
-    const tagEl = document.getElementById('next-up-tag');
-    const titleEl = document.getElementById('next-up-title');
-    const subtitleEl = document.getElementById('next-up-subtitle');
-    const btnJump = document.getElementById('btn-jump-next');
+    const nextPill = document.getElementById('next-up-pill');
+    const pillTitle = document.getElementById('next-pill-title');
+    const legacyTagEl = document.getElementById('next-up-tag');
+    const legacyTitleEl = document.getElementById('next-up-title');
+    const legacySubtitleEl = document.getElementById('next-up-subtitle');
+    const legacyBtnJump = document.getElementById('btn-jump-next');
 
     const currentId = historyStack[historyStack.length - 1];
     const isMacroView = (currentId === 'root' || currentId === 'tech');
 
-    // 1. Try local context first if inside a specific branch
     const localRec = !isMacroView ? getLocalContextRecommendation() : null;
     const globalRec = getGlobalBFSRecommendation();
 
     if (localRec && !localRec.allDone) {
-      // Local context active
-      btnJump.style.display = 'inline-flex';
-      tagEl.textContent = localRec.tag;
-      tagEl.style.background = 'var(--accent-blue)';
-      titleEl.textContent = localRec.title;
-      subtitleEl.textContent = localRec.subtitle;
-      btnJump.textContent = '➔ Next Station';
-
-      btnJump.onclick = () => {
-        if (localRec.targetStack) {
-          historyStack = localRec.targetStack;
-        } else {
-          historyStack.push(localRec.node.id);
-        }
-        renderCurrentView();
-      };
-      return;
-    }
-
-    // 2. Global BFS queue fallback
-    if (!globalRec) {
-      tagEl.textContent = 'MASTERED';
-      tagEl.style.background = 'var(--accent-green-text)';
-      titleEl.textContent = 'All Available Stations Completed!';
-      subtitleEl.textContent = '';
-      btnJump.style.display = 'none';
-      return;
-    }
-
-    btnJump.style.display = 'inline-flex';
-    tagEl.textContent = globalRec.tag;
-    tagEl.style.background = globalRec.depth === 1 ? 'var(--accent-blue)' : 'var(--accent-purple)';
-    titleEl.textContent = globalRec.title;
-    subtitleEl.textContent = globalRec.subtitle;
-    btnJump.textContent = '➔ Jump to Station';
-
-    btnJump.onclick = () => {
-      if (globalRec.depth === 1) {
-        historyStack = ['root', 'tech', globalRec.node.id];
-      } else if (globalRec.depth === 2) {
-        historyStack = ['root', 'tech', globalRec.parent.id, globalRec.node.id];
+      if (nextPill && pillTitle) {
+        nextPill.style.display = 'inline-flex';
+        pillTitle.textContent = localRec.node.title;
+        nextPill.onclick = () => {
+          if (localRec.targetStack) {
+            historyStack = localRec.targetStack;
+          } else {
+            historyStack.push(localRec.node.id);
+          }
+          renderCurrentView('forward');
+        };
       }
-      renderCurrentView();
-    };
-  }
+      if (legacyBtnJump && legacyTagEl) {
+        legacyBtnJump.style.display = 'inline-flex';
+        legacyTagEl.textContent = localRec.tag;
+        legacyTitleEl.textContent = localRec.title;
+        if (legacySubtitleEl) legacySubtitleEl.textContent = localRec.subtitle;
+        legacyBtnJump.onclick = () => {
+          if (localRec.targetStack) historyStack = localRec.targetStack;
+          else historyStack.push(localRec.node.id);
+          renderCurrentView('forward');
+        };
+      }
+      return;
+    }
 
-  // ---------------------------------------------------------------------------
-  // 4. Overall Progress Calculation
-  // ---------------------------------------------------------------------------
+    if (!globalRec) {
+      if (nextPill && pillTitle) {
+        nextPill.style.display = 'inline-flex';
+        pillTitle.textContent = 'Mastered ✓';
+        nextPill.onclick = null;
+      }
+      if (legacyBtnJump && legacyTagEl) {
+        legacyTagEl.textContent = 'MASTERED';
+        legacyTitleEl.textContent = 'All Available Stations Completed!';
+        legacyBtnJump.style.display = 'none';
+      }
+      return;
+    }
+
+    if (nextPill && pillTitle) {
+      nextPill.style.display = 'inline-flex';
+      pillTitle.textContent = globalRec.node.title;
+      nextPill.onclick = () => {
+        if (globalRec.depth === 1) {
+          historyStack = ['root', 'tech', globalRec.node.id];
+        } else if (globalRec.depth === 2) {
+          historyStack = ['root', 'tech', globalRec.parent.id, globalRec.node.id];
+        }
+        renderCurrentView('forward');
+      };
+    }
+
+    if (legacyBtnJump && legacyTagEl) {
+      legacyBtnJump.style.display = 'inline-flex';
+      legacyTagEl.textContent = globalRec.tag;
+      legacyTitleEl.textContent = globalRec.title;
+      if (legacySubtitleEl) legacySubtitleEl.textContent = globalRec.subtitle;
+      legacyBtnJump.onclick = () => {
+        if (globalRec.depth === 1) {
+          historyStack = ['root', 'tech', globalRec.node.id];
+        } else if (globalRec.depth === 2) {
+          historyStack = ['root', 'tech', globalRec.parent.id, globalRec.node.id];
+        }
+        renderCurrentView('forward');
+      };
+    }
+  }
 
   function updateOverallProgress() {
     const progressFill = document.getElementById('overall-progress-fill');
     const progressText = document.getElementById('overall-progress-text');
+    const progressPill = document.getElementById('overall-progress-pill');
 
     let total = 0;
     let completed = 0;
@@ -471,351 +514,311 @@
     }
 
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-    progressFill.style.width = percent + '%';
-    progressText.textContent = `${percent}% (${completed}/${total} Stations Completed)`;
+    if (progressFill) progressFill.style.width = percent + '%';
+    if (progressText) progressText.textContent = `${percent}%`;
+    if (progressPill) progressPill.title = `${completed}/${total} Stations Completed (${percent}%)`;
   }
 
+  // 5. Breadcrumbs & Unified Navigation
   // ---------------------------------------------------------------------------
-  // 5. Breadcrumbs & Header Rendering
-  // ---------------------------------------------------------------------------
+
+  let isNavigating = false;
 
   function renderHeaderAndBreadcrumbs() {
     const breadcrumbsEl = document.getElementById('breadcrumbs');
     const backBtnEl = document.getElementById('btn-back');
+    const logoEl = document.getElementById('logo');
 
-    breadcrumbsEl.innerHTML = '';
+    if (logoEl) {
+      logoEl.onclick = () => {
+        if (historyStack.length > 1) {
+          navigateBack(['root']);
+        }
+      };
+    }
 
-    historyStack.forEach((id, index) => {
-      const node = getNode(id);
-      const title = node ? node.title : id;
-      const isLast = index === historyStack.length - 1;
+    if (breadcrumbsEl) {
+      breadcrumbsEl.innerHTML = '';
+      historyStack.forEach((id, index) => {
+        const node = getNode(id);
+        const title = node ? node.title : id;
+        const isLast = index === historyStack.length - 1;
 
-      if (index > 0) {
-        const sep = document.createElement('span');
-        sep.className = 'breadcrumb-sep';
-        sep.textContent = '/';
-        breadcrumbsEl.appendChild(sep);
-      }
+        if (index > 0) {
+          const sep = document.createElement('span');
+          sep.className = 'breadcrumb-sep';
+          sep.textContent = '/';
+          breadcrumbsEl.appendChild(sep);
+        }
 
-      const item = document.createElement('span');
-      if (isLast) {
-        item.className = 'breadcrumb-current';
-        item.textContent = title;
-      } else {
-        item.className = 'breadcrumb-item';
-        item.textContent = title;
-        item.onclick = () => {
-          historyStack = historyStack.slice(0, index + 1);
-          renderCurrentView();
-        };
-      }
-      breadcrumbsEl.appendChild(item);
-    });
+        const item = document.createElement('span');
+        if (isLast) {
+          item.className = 'breadcrumb-current';
+          item.textContent = title;
+        } else {
+          item.className = 'breadcrumb-item';
+          item.textContent = title;
+          item.onclick = () => {
+            if (index < historyStack.length - 1) {
+              navigateBack(historyStack.slice(0, index + 1));
+            }
+          };
+        }
+        breadcrumbsEl.appendChild(item);
+      });
+    }
 
-    backBtnEl.style.display = historyStack.length > 1 ? 'inline-flex' : 'none';
-    backBtnEl.onclick = () => {
-      if (historyStack.length > 1) {
-        historyStack.pop();
-        renderCurrentView();
-      }
-    };
+    if (backBtnEl) {
+      backBtnEl.style.display = historyStack.length > 1 ? 'inline-flex' : 'none';
+      backBtnEl.onclick = () => {
+        if (historyStack.length > 1) {
+          navigateBack();
+        }
+      };
+    }
   }
 
   // ---------------------------------------------------------------------------
-  // 6. View Rendering (Node View + Child Roads or Macro Swimlanes)
+  // 6. Local Graph Canvas, Splitting Animation & SVG Connectors
   // ---------------------------------------------------------------------------
 
-  function renderCurrentView() {
+  function drawConnectorLines() {
+    const svgEl = document.getElementById('graph-svg');
+    const parentCard = document.querySelector('.graph-parent-card');
+    const childNodes = document.querySelectorAll('.graph-child-node');
+
+    if (!svgEl || !parentCard || childNodes.length === 0) {
+      if (svgEl) svgEl.innerHTML = '';
+      return;
+    }
+
+    const svgRect = svgEl.getBoundingClientRect();
+    const pRect = parentCard.getBoundingClientRect();
+
+    const x1 = pRect.left + pRect.width / 2 - svgRect.left;
+    const y1 = pRect.bottom - svgRect.top;
+
+    let svgHtml = '';
+
+    childNodes.forEach((childEl, index) => {
+      const cRect = childEl.getBoundingClientRect();
+      const x2 = cRect.left + cRect.width / 2 - svgRect.left;
+      const y2 = cRect.top - svgRect.top;
+
+      const dy = y2 - y1;
+      const cp1_y = y1 + dy * 0.55;
+      const cp2_y = y2 - dy * 0.45;
+
+      const pathData = `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${x1.toFixed(1)} ${cp1_y.toFixed(1)}, ${x2.toFixed(1)} ${cp2_y.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+      const status = childEl.dataset.status || 'todo';
+      const pathId = `spline-${index}`;
+
+      svgHtml += `<path id="${pathId}" class="graph-svg-path ${status}" d="${pathData}" />`;
+
+      childEl.onmouseenter = () => {
+        const p = document.getElementById(pathId);
+        if (p) p.classList.add('highlight');
+      };
+      childEl.onmouseleave = () => {
+        const p = document.getElementById(pathId);
+        if (p) p.classList.remove('highlight');
+      };
+    });
+
+    svgEl.innerHTML = svgHtml;
+    svgEl.classList.remove('svg-fading');
+  }
+
+  function drillDownToChild(childId, childEl) {
+    if (isNavigating) return;
+    isNavigating = true;
+
+    const parentCard = document.querySelector('.graph-parent-card');
+    const allChildNodes = document.querySelectorAll('.graph-child-node');
+    const svgEl = document.getElementById('graph-svg');
+
+    if (!parentCard || !childEl) {
+      historyStack.push(childId);
+      renderCurrentView('forward');
+      isNavigating = false;
+      return;
+    }
+
+    const pRect = parentCard.getBoundingClientRect();
+    const cRect = childEl.getBoundingClientRect();
+    const deltaX = (pRect.left + pRect.width / 2) - (cRect.left + cRect.width / 2);
+    const deltaY = (pRect.top + pRect.height / 2) - (cRect.top + cRect.height / 2);
+
+    if (svgEl) svgEl.classList.add('svg-fading');
+    parentCard.classList.add('node-parent-exiting');
+
+    allChildNodes.forEach(node => {
+      if (node === childEl) {
+        node.classList.add('node-drilling-target');
+        node.style.transform = `translate(${deltaX.toFixed(1)}px, ${deltaY.toFixed(1)}px) scale(1.12)`;
+      } else {
+        node.classList.add('node-sibling-fading');
+      }
+    });
+
+    setTimeout(() => {
+      historyStack.push(childId);
+      renderCurrentView('forward');
+      isNavigating = false;
+    }, 320);
+  }
+
+  function navigateBack(targetStack = null) {
+    if (isNavigating) return;
+    if (historyStack.length <= 1 && !targetStack) return;
+    isNavigating = true;
+
+    const parentCard = document.querySelector('.graph-parent-card');
+    const allChildNodes = document.querySelectorAll('.graph-child-node');
+    const svgEl = document.getElementById('graph-svg');
+
+    if (svgEl) svgEl.classList.add('svg-fading');
+    if (parentCard) parentCard.classList.add('node-parent-collapsing');
+
+    allChildNodes.forEach(node => {
+      node.classList.add('node-children-collapsing');
+    });
+
+    setTimeout(() => {
+      if (targetStack) {
+        historyStack = targetStack;
+      } else {
+        historyStack.pop();
+      }
+      renderCurrentView('back');
+      isNavigating = false;
+    }, 220);
+  }
+
+  function renderCurrentView(direction = 'none') {
     renderHeaderAndBreadcrumbs();
     updateNextUpBanner();
 
     const currentNode = getCurrentNode();
     const currentId = historyStack[historyStack.length - 1];
 
-    const titleEl = document.getElementById('node-title');
-    const descEl = document.getElementById('node-desc');
-    const badgesGroupEl = document.getElementById('node-badges');
-    const viewToggleEl = document.getElementById('view-mode-toggle');
-    const selectQuickStatus = document.getElementById('select-quick-status');
-    const container = document.getElementById('roadmap-container');
-    const roadsHeaderTitle = document.getElementById('child-roads-title');
-    const roadsHeaderCount = document.getElementById('child-roads-count');
+    const parentAnchor = document.getElementById('graph-parent-anchor');
+    const childrenAnchor = document.getElementById('graph-children-anchor');
+    const svgEl = document.getElementById('graph-svg');
+
+    if (!parentAnchor || !childrenAnchor) return;
 
     if (!currentNode) {
-      titleEl.textContent = 'Node Initializing';
-      descEl.textContent = 'Loading graph station details...';
-      container.innerHTML = '<p style="color: var(--text-muted); padding: 20px;">Fetching node metadata...</p>';
+      parentAnchor.innerHTML = '<div class="graph-parent-card"><span class="graph-parent-title">Station Loading...</span></div>';
+      childrenAnchor.innerHTML = '';
+      if (svgEl) svgEl.innerHTML = '';
       return;
     }
 
     activeNode = currentNode;
-    titleEl.textContent = currentNode.title;
-    descEl.textContent = currentNode.description || '';
-
-    // Badges
-    const status = getNodeStatus(currentId);
-    badgesGroupEl.innerHTML = '';
-
-    const depthBadge = document.createElement('span');
-    depthBadge.className = 'badge-pill depth';
-    depthBadge.textContent = `d=${currentNode.depth !== undefined ? currentNode.depth : (historyStack.length - 1)}`;
-    badgesGroupEl.appendChild(depthBadge);
-
-    if (currentNode.badge) {
-      const badgePill = document.createElement('span');
-      badgePill.className = 'badge-pill';
-      badgePill.textContent = currentNode.badge;
-      badgesGroupEl.appendChild(badgePill);
-    }
-
-    const statusBadge = document.createElement('span');
-    statusBadge.className = `badge-pill status-${status}`;
-    const statusLabels = { 'todo': 'To Do', 'in-progress': 'In Progress', 'completed': 'Done ✓' };
-    statusBadge.textContent = statusLabels[status] || status;
-    badgesGroupEl.appendChild(statusBadge);
-
-    // Quick Status Select
-    if (selectQuickStatus) {
-      selectQuickStatus.value = status;
-      selectQuickStatus.onchange = (e) => {
-        setNodeStatus(currentId, e.target.value);
-      };
-    }
-
-    if (currentId === 'tech') {
-      viewToggleEl.style.display = 'flex';
-      document.getElementById('btn-view-swimlanes').className = `btn-toggle ${viewMode === 'swimlanes' ? 'active' : ''}`;
-      document.getElementById('btn-view-road').className = `btn-toggle ${viewMode === 'road' ? 'active' : ''}`;
-    } else {
-      viewToggleEl.style.display = 'none';
-    }
-
-    container.innerHTML = '';
-
-    if (currentId === 'tech' && viewMode === 'swimlanes') {
-      roadsHeaderTitle.textContent = 'Parallel Track Swimlanes';
-      roadsHeaderCount.textContent = '4 Tracks + Fusion';
-      renderMacroSwimlanes(container);
-      return;
-    }
-
-    renderChildRoads(currentNode, container);
-  }
-
-  // ---------------------------------------------------------------------------
-  // 6A. Macro Swimlanes (Parallel Tracks side-by-side)
-  // ---------------------------------------------------------------------------
-
-  function renderMacroSwimlanes(container) {
-    const swimlanesDiv = document.createElement('div');
-    swimlanesDiv.className = 'macro-swimlanes-container';
-
-    const gridDiv = document.createElement('div');
-    gridDiv.className = 'parallel-tracks-grid';
-
-    const trackKeys = ['core-cs', 'swe', 'data', 'ai'];
-
-    trackKeys.forEach(trackId => {
-      const trackNode = getNode(trackId);
-      if (!trackNode) return;
-
-      const trackStatus = getNodeStatus(trackId);
-      const laneDiv = document.createElement('div');
-      laneDiv.className = 'track-lane';
-
-      const headerDiv = document.createElement('div');
-      headerDiv.className = 'track-lane-header';
-      headerDiv.title = `Click to drill down into ${trackNode.title}`;
-      headerDiv.onclick = () => {
-        historyStack.push(trackId);
-        renderCurrentView();
-      };
-
-      const titleEl = document.createElement('div');
-      titleEl.className = 'track-lane-title';
-      titleEl.textContent = trackNode.title;
-
-      const statusEl = document.createElement('div');
-      statusEl.className = 'track-lane-progress';
-      const statusText = trackStatus === 'completed' ? 'Done ✓' : (trackStatus === 'in-progress' ? 'In Progress ⏳' : 'To Do');
-      statusEl.textContent = statusText;
-
-      headerDiv.appendChild(titleEl);
-      headerDiv.appendChild(statusEl);
-      laneDiv.appendChild(headerDiv);
-
-      const modulesDiv = document.createElement('div');
-      modulesDiv.className = 'track-lane-modules';
-
-      const childIds = trackNode.children || [];
-      if (childIds.length === 0) {
-        const emptyHint = document.createElement('div');
-        emptyHint.style.fontSize = '0.78rem';
-        emptyHint.style.color = 'var(--text-muted)';
-        emptyHint.style.padding = '8px 4px';
-        emptyHint.textContent = trackStatus === 'completed' ? '✓ Done (Ready to expand)' : '0 child stations';
-        modulesDiv.appendChild(emptyHint);
-      } else {
-        childIds.forEach(cid => {
-          const childNode = getNode(cid);
-          if (!childNode) return;
-
-          const cstatus = getNodeStatus(cid);
-          const pill = document.createElement('div');
-          pill.className = `module-pill status-${cstatus}`;
-          pill.title = childNode.description || '';
-
-          const mTitle = document.createElement('span');
-          mTitle.className = 'module-pill-title';
-          mTitle.textContent = childNode.title;
-
-          const mBadge = document.createElement('span');
-          mBadge.className = 'module-pill-badge';
-          mBadge.textContent = `${childNode.badge || ''} • ${cstatus.toUpperCase()}`;
-
-          pill.appendChild(mTitle);
-          pill.appendChild(mBadge);
-
-          pill.onclick = () => {
-            historyStack.push(trackId);
-            historyStack.push(cid);
-            renderCurrentView();
-          };
-
-          modulesDiv.appendChild(pill);
-        });
-      }
-
-      laneDiv.appendChild(modulesDiv);
-      gridDiv.appendChild(laneDiv);
-    });
-
-    swimlanesDiv.appendChild(gridDiv);
-
-    const fusionNode = getNode('fusion');
-    if (fusionNode) {
-      const fusionDiv = document.createElement('div');
-      fusionDiv.className = 'macro-fusion-banner';
-
-      const fHeader = document.createElement('div');
-      fHeader.className = 'fusion-banner-header';
-
-      const fTitle = document.createElement('div');
-      fTitle.className = 'fusion-banner-title';
-      fTitle.innerHTML = '<span>⚡</span> Milestone Cross-Domain Fusion Projects';
-
-      const fAction = document.createElement('button');
-      fAction.className = 'btn-secondary';
-      fAction.textContent = 'Explore Fusion Track →';
-      fAction.onclick = () => {
-        historyStack.push('fusion');
-        renderCurrentView();
-      };
-
-      fHeader.appendChild(fTitle);
-      fHeader.appendChild(fAction);
-      fusionDiv.appendChild(fHeader);
-
-      swimlanesDiv.appendChild(fusionDiv);
-    }
-
-    container.appendChild(swimlanesDiv);
-  }
-
-  // ---------------------------------------------------------------------------
-  // 6B. Recursive Child Road View & Leaf Node Learning Presentation
-  // ---------------------------------------------------------------------------
-
-  function renderChildRoads(currentNode, container) {
-    const currentId = historyStack[historyStack.length - 1];
-    const roadsHeaderTitle = document.getElementById('child-roads-title');
-    const roadsHeaderCount = document.getElementById('child-roads-count');
-
-    const children = currentNode.children || [];
     const currentStatus = getNodeStatus(currentId);
 
+    // 1. Render Active Parent Node Card
+    parentAnchor.innerHTML = `
+      <div class="graph-parent-card">
+        <div class="graph-parent-top-row">
+          <button class="btn-status-cycle status-${currentStatus}" id="btn-status-toggle" title="Click to cycle status: To Do → In Progress → Completed">
+            ${currentStatus === 'completed' ? '● Done' : (currentStatus === 'in-progress' ? '◐ In Progress' : '○ To Do')}
+          </button>
+        </div>
+        <div class="graph-parent-title">${currentNode.title}</div>
+        <div class="graph-parent-actions">
+          <button class="btn-graph-action btn-graph-summary" id="btn-parent-summary" title="View and edit Markdown notes">
+            📝 Summary
+          </button>
+          <button class="btn-graph-action btn-graph-info" id="btn-parent-info" title="Inspect mental models and resources">
+            ℹ️ Info
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Bind Status Toggle
+    const statusToggleBtn = document.getElementById('btn-status-toggle');
+    if (statusToggleBtn) {
+      statusToggleBtn.onclick = () => {
+        const nextMap = { 'todo': 'in-progress', 'in-progress': 'completed', 'completed': 'todo' };
+        const nextStatus = nextMap[currentStatus] || 'todo';
+        setNodeStatus(currentId, nextStatus);
+      };
+    }
+
+    // Bind Summary & Info buttons
+    const btnSummary = document.getElementById('btn-parent-summary');
+    if (btnSummary) btnSummary.onclick = () => openSummaryModal(currentId);
+
+    const btnInfo = document.getElementById('btn-parent-info');
+    if (btnInfo) btnInfo.onclick = () => openInfoDrawer(currentId);
+
+    // 2. Render Children or Leaf Dock
+    childrenAnchor.innerHTML = '';
+    const children = currentNode.children || [];
+
     if (children.length === 0) {
-      roadsHeaderTitle.textContent = 'Sub-stations';
-      roadsHeaderCount.textContent = '0';
-
-      const leafDiv = document.createElement('div');
-      leafDiv.className = 'leaf-station-banner compact';
-
+      // Leaf Node Presentation
       const nextSibling = getNextSiblingNode(currentId);
       let nextBtnHtml = '';
       if (nextSibling) {
         nextBtnHtml = `
-          <button class="btn-node-action btn-action-next-sibling" id="btn-next-sibling">
+          <button class="btn-leaf-action btn-leaf-next" id="btn-leaf-next">
             ➔ Next: ${nextSibling.title}
           </button>
         `;
       }
 
-      if (currentStatus === 'completed') {
-        leafDiv.innerHTML = `
-          <div class="leaf-compact-row">
-            <span class="leaf-status-indicator done">✓ Completed</span>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              ${nextBtnHtml}
-              <button class="btn-node-action btn-action-expand" id="btn-expand-children">
-                ➕ Expand Child Stations
-              </button>
-            </div>
-          </div>
-        `;
-      } else {
-        leafDiv.innerHTML = `
-          <div class="leaf-compact-row">
-            <span class="leaf-status-indicator">Leaf Station</span>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <button class="btn-node-action btn-action-summary" id="btn-leaf-open-summary">
-                📝 Notes
-              </button>
-              <button class="btn-node-action btn-action-complete" id="btn-leaf-mark-done">
-                ✓ Mark Done
-              </button>
-              ${nextBtnHtml}
-            </div>
-          </div>
-        `;
+      const leafDock = document.createElement('div');
+      leafDock.className = 'leaf-dock';
+      leafDock.innerHTML = `
+        <button class="btn-leaf-action btn-graph-summary" id="btn-leaf-summary">
+          📝 Notes & Code
+        </button>
+        <button class="btn-leaf-action ${currentStatus === 'completed' ? 'btn-leaf-action' : 'btn-leaf-complete'}" id="btn-leaf-toggle">
+          ${currentStatus === 'completed' ? '✓ Completed' : '✓ Mark Complete'}
+        </button>
+        ${nextBtnHtml}
+        <button class="btn-leaf-action btn-leaf-expand" id="btn-leaf-expand" title="Create and expand sub-stations on disk">
+          ➕ Expand Sub-stations
+        </button>
+      `;
+
+      childrenAnchor.appendChild(leafDock);
+
+      const leafSumBtn = document.getElementById('btn-leaf-summary');
+      if (leafSumBtn) leafSumBtn.onclick = () => openSummaryModal(currentId);
+
+      const leafTogBtn = document.getElementById('btn-leaf-toggle');
+      if (leafTogBtn) {
+        leafTogBtn.onclick = () => {
+          const next = currentStatus === 'completed' ? 'in-progress' : 'completed';
+          setNodeStatus(currentId, next);
+        };
       }
 
-      container.appendChild(leafDiv);
+      const leafExpBtn = document.getElementById('btn-leaf-expand');
+      if (leafExpBtn) leafExpBtn.onclick = () => expandNodeChildren(currentId);
 
-      const leafSummaryBtn = document.getElementById('btn-leaf-open-summary');
-      if (leafSummaryBtn) leafSummaryBtn.onclick = () => openSummaryModal(currentId);
-
-      const leafDoneBtn = document.getElementById('btn-leaf-mark-done');
-      if (leafDoneBtn) leafDoneBtn.onclick = () => setNodeStatus(currentId, 'completed');
-
-      const expandBtn = document.getElementById('btn-expand-children');
-      if (expandBtn) expandBtn.onclick = () => expandNodeChildren(currentId);
-
-      const nextSibBtn = document.getElementById('btn-next-sibling');
-      if (nextSibBtn && nextSibling) {
-        nextSibBtn.onclick = () => {
+      const leafNextBtn = document.getElementById('btn-leaf-next');
+      if (leafNextBtn && nextSibling) {
+        leafNextBtn.onclick = () => {
           const nextStack = historyStack.slice(0, -1);
           nextStack.push(nextSibling.id);
           historyStack = nextStack;
-          renderCurrentView();
+          renderCurrentView('forward');
         };
       }
+
+      if (svgEl) svgEl.innerHTML = '';
       return;
     }
 
-    // Branch Hub Presentation: Has Children
-    roadsHeaderTitle.textContent = 'Child Stations';
-    roadsHeaderCount.textContent = `${children.length}`;
-
-    const roadLine = document.createElement('div');
-    roadLine.className = 'road-line';
-
-    const trackLine = document.createElement('div');
-    trackLine.className = 'road-track';
-    roadLine.appendChild(trackLine);
-
-    // Identify first uncompleted child for contextual emphasis
+    // Branch Hub: Render Immediate Child Stations
     let firstUncompletedFound = false;
+    const childEls = [];
 
     children.forEach((childId, index) => {
       const childNode = getNode(childId);
@@ -825,86 +828,52 @@
       const isNextInBranch = (!firstUncompletedFound && childStatus !== 'completed');
       if (isNextInBranch) firstUncompletedFound = true;
 
-      const stationEl = document.createElement('div');
-      stationEl.className = `station status-${childStatus} ${isNextInBranch ? 'next-in-branch' : ''}`;
-
       const nodeEl = document.createElement('div');
-      nodeEl.className = 'station-node';
-      nodeEl.title = `Station ${index + 1}: ${childStatus.toUpperCase()}`;
+      nodeEl.className = `graph-child-node ${isNextInBranch ? 'next-target' : ''} ${direction === 'forward' ? 'spawning' : ''}`;
+      nodeEl.dataset.status = childStatus;
+      nodeEl.dataset.id = childId;
 
-      const cardEl = document.createElement('div');
-      cardEl.className = 'station-card';
-
-      const headerEl = document.createElement('div');
-      headerEl.className = 'station-card-header';
-
-      const titleSpan = document.createElement('span');
-      titleSpan.className = 'station-title';
-      titleSpan.textContent = `${String(index + 1).padStart(2, '0')}. ${childNode.title}`;
-
-      const badgesGroup = document.createElement('div');
-      badgesGroup.className = 'station-badges-group';
-
-      if (isNextInBranch) {
-        const nextBadge = document.createElement('span');
-        nextBadge.className = 'station-badge priority';
-        nextBadge.textContent = '👉 Next';
-        badgesGroup.appendChild(nextBadge);
-      }
-
-      if (childNode.badge) {
-        const badgeSpan = document.createElement('span');
-        badgeSpan.className = 'station-badge';
-        badgeSpan.textContent = childNode.badge;
-        badgesGroup.appendChild(badgeSpan);
-      }
-
-      const statusBadge = document.createElement('span');
-      statusBadge.className = `station-badge status-${childStatus}`;
-      const statusLabel = childStatus === 'completed' ? 'Done ✓' : (childStatus === 'in-progress' ? 'In Progress' : 'To Do');
-      statusBadge.textContent = statusLabel;
-      badgesGroup.appendChild(statusBadge);
-
-      headerEl.appendChild(titleSpan);
-      headerEl.appendChild(badgesGroup);
-      cardEl.appendChild(headerEl);
-
-      if (childNode.description) {
-        const descP = document.createElement('p');
-        descP.className = 'station-desc';
-        descP.textContent = childNode.description;
-        cardEl.appendChild(descP);
-      }
-
-      const footerEl = document.createElement('div');
-      footerEl.className = 'station-footer';
-
-      const childCountSpan = document.createElement('span');
+      const dotClass = childStatus === 'completed' ? 'completed' : (childStatus === 'in-progress' ? 'in-progress' : 'todo');
       const subCount = childNode.children ? childNode.children.length : 0;
-      childCountSpan.textContent = subCount > 0 ? `${subCount} Sub-stations` : 'Leaf Station';
+      const branchHtml = subCount > 0 ? `<span class="child-branch-indicator" title="${subCount} sub-stations">⑂ ${subCount}</span>` : '';
+      const nextTag = isNextInBranch ? `<span class="next-tag-chip">Next</span>` : '';
 
-      const actionSpan = document.createElement('span');
-      actionSpan.className = 'station-action-hint';
-      actionSpan.textContent = isNextInBranch ? 'Continue here ➔' : 'Explore station ➔';
+      nodeEl.innerHTML = `
+        <span class="child-status-dot ${dotClass}"></span>
+        <span class="child-index">${String(index + 1).padStart(2, '0')}</span>
+        <span class="child-node-title" title="${childNode.title}">${childNode.title}</span>
+        ${branchHtml}
+        ${nextTag}
+      `;
 
-      footerEl.appendChild(childCountSpan);
-      footerEl.appendChild(actionSpan);
-      cardEl.appendChild(footerEl);
+      nodeEl.onclick = () => drillDownToChild(childId, nodeEl);
 
-      cardEl.onclick = () => {
-        historyStack.push(childId);
-        renderCurrentView();
-      };
-
-      stationEl.appendChild(nodeEl);
-      stationEl.appendChild(cardEl);
-      roadLine.appendChild(stationEl);
+      childrenAnchor.appendChild(nodeEl);
+      childEls.push(nodeEl);
     });
 
-    container.appendChild(roadLine);
+    // Splitting Animation (organic fan out from parent)
+    if (direction === 'forward') {
+      requestAnimationFrame(() => {
+        childEls.forEach((el, i) => {
+          setTimeout(() => {
+            el.classList.remove('spawning');
+            el.classList.add('spawned');
+          }, i * 45);
+        });
+      });
+    }
+
+    // Draw SVG Connector Lines after layout stabilizes
+    setTimeout(() => {
+      drawConnectorLines();
+    }, direction === 'forward' ? (childEls.length * 45 + 100) : 30);
   }
 
-  // ---------------------------------------------------------------------------
+  window.addEventListener('resize', () => {
+    requestAnimationFrame(drawConnectorLines);
+  });
+
   // 6C. Just-in-Time Child Expansion
   // ---------------------------------------------------------------------------
 
@@ -1224,7 +1193,7 @@
         const data = await res.json();
         isServerConnected = true;
         pill.textContent = '🟢 Server Connected';
-        pill.className = 'server-badge connected';
+        pill.className = 'server-status-dot connected';
         pill.title = `Serving ${data.count} nodes from D:\\Career Roadmap\\graph`;
 
         if (data.nodes) {
@@ -1238,7 +1207,7 @@
 
     isServerConnected = false;
     pill.textContent = '🟡 Offline';
-    pill.className = 'server-badge offline';
+    pill.className = 'server-status-dot offline';
     pill.title = 'Run "run.bat" or "python server.py" for live disk synchronization.';
     return false;
   }
@@ -1248,23 +1217,20 @@
   // ---------------------------------------------------------------------------
 
   function setupEventListeners() {
-    document.getElementById('logo').onclick = () => {
-      historyStack = ['root', 'tech'];
-      renderCurrentView();
-    };
+    const logo = document.getElementById('logo');
+    if (logo) {
+      logo.onclick = () => {
+        if (historyStack.length > 1) {
+          navigateBack(['root']);
+        }
+      };
+    }
 
-    document.getElementById('btn-open-info').onclick = () => {
-      const currentId = historyStack[historyStack.length - 1];
-      openInfoDrawer(currentId);
-    };
+    const drawerClose = document.getElementById('drawer-close');
+    if (drawerClose) drawerClose.onclick = closeInfoDrawer;
 
-    document.getElementById('btn-open-summary').onclick = () => {
-      const currentId = historyStack[historyStack.length - 1];
-      openSummaryModal(currentId);
-    };
-
-    document.getElementById('drawer-close').onclick = closeInfoDrawer;
-    document.getElementById('drawer-overlay').onclick = closeInfoDrawer;
+    const drawerOverlay = document.getElementById('drawer-overlay');
+    if (drawerOverlay) drawerOverlay.onclick = closeInfoDrawer;
 
     ['todo', 'inprogress', 'completed'].forEach(stKey => {
       const val = stKey === 'inprogress' ? 'in-progress' : stKey;
@@ -1277,14 +1243,27 @@
       }
     });
 
-    document.getElementById('btn-tab-preview').onclick = () => switchSummaryTab('preview');
-    document.getElementById('btn-tab-edit').onclick = () => switchSummaryTab('edit');
-    document.getElementById('btn-save-summary').onclick = saveSummaryToDisk;
-    document.getElementById('btn-close-summary').onclick = closeSummaryModal;
-    document.getElementById('btn-summary-done').onclick = closeSummaryModal;
-    document.getElementById('summary-modal-overlay').onclick = (e) => {
-      if (e.target.id === 'summary-modal-overlay') closeSummaryModal();
-    };
+    const btnTabPrev = document.getElementById('btn-tab-preview');
+    if (btnTabPrev) btnTabPrev.onclick = () => switchSummaryTab('preview');
+
+    const btnTabEdit = document.getElementById('btn-tab-edit');
+    if (btnTabEdit) btnTabEdit.onclick = () => switchSummaryTab('edit');
+
+    const btnSave = document.getElementById('btn-save-summary');
+    if (btnSave) btnSave.onclick = saveSummaryToDisk;
+
+    const btnClose = document.getElementById('btn-close-summary');
+    if (btnClose) btnClose.onclick = closeSummaryModal;
+
+    const btnDone = document.getElementById('btn-summary-done');
+    if (btnDone) btnDone.onclick = closeSummaryModal;
+
+    const modalOverlay = document.getElementById('summary-modal-overlay');
+    if (modalOverlay) {
+      modalOverlay.onclick = (e) => {
+        if (e.target.id === 'summary-modal-overlay') closeSummaryModal();
+      };
+    }
 
     document.querySelectorAll('.btn-tool').forEach(btn => {
       btn.onclick = () => insertEditorFormatting(btn.getAttribute('data-tool'));
@@ -1293,21 +1272,12 @@
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         const overlay = document.getElementById('summary-modal-overlay');
-        if (overlay.classList.contains('open')) {
+        if (overlay && overlay.classList.contains('open')) {
           e.preventDefault();
           saveSummaryToDisk();
         }
       }
     });
-
-    document.getElementById('btn-view-swimlanes').onclick = () => {
-      viewMode = 'swimlanes';
-      renderCurrentView();
-    };
-    document.getElementById('btn-view-road').onclick = () => {
-      viewMode = 'road';
-      renderCurrentView();
-    };
   }
 
   async function init() {

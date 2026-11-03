@@ -5,7 +5,13 @@
   "depth": 1,
   "description": "Classical machine learning, deep learning, NLP, computer vision, modern GenAI/LLMs, and MLOps.",
   "status": "todo",
-  "children": [],
+  "children": [
+    "ai-classical",
+    "ai-deeplearning",
+    "ai-genai",
+    "ai-mlops",
+    "ai-nlp-cv"
+  ],
   "resources": [
     {
       "label": "Scikit-Learn User Guide",

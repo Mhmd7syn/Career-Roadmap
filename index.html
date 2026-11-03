@@ -10,88 +10,47 @@
 </head>
 <body>
 
-  <!-- Top Navigation & Progress Bar -->
-  <header>
-    <div class="header-top">
-      <div class="logo-group">
-        <div class="logo" id="logo" title="Return to Master Root Graph">
-          <span>⚡</span> Career Knowledge Graph
-        </div>
-        <span class="server-badge" id="server-status-pill" title="Checking server status...">Connecting...</span>
+  <!-- Unified Top Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <button class="btn-nav-back" id="btn-back" title="Go up to parent node" style="display: none;">←</button>
+      <div class="logo-clean" id="logo" title="Return to Master Root Graph">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">Knowledge Graph</span>
       </div>
-
-      <div class="overall-progress-box">
-        <span class="progress-text" id="overall-progress-text">0% Active</span>
-        <div class="progress-bar-container">
-          <div class="progress-bar-fill" id="overall-progress-fill"></div>
-        </div>
-      </div>
+      <div class="breadcrumbs" id="breadcrumbs"></div>
     </div>
 
-    <div class="nav-bar">
-      <button class="btn-back" id="btn-back" style="display: none;">← Back</button>
-      <div class="breadcrumbs" id="breadcrumbs"></div>
+    <div class="header-right">
+      <!-- Compact BFS Next Milestone Pill -->
+      <button class="next-pill" id="next-up-pill" style="display: none;" title="Next BFS Priority">
+        <span class="next-pill-prefix">Next:</span>
+        <span class="next-pill-title" id="next-pill-title">...</span>
+        <span class="next-pill-arrow">➔</span>
+      </button>
+
+      <!-- Overall Progress -->
+      <div class="progress-pill" id="overall-progress-pill" title="Overall Graph Completion">
+        <div class="progress-pill-bar"><div class="progress-pill-fill" id="overall-progress-fill"></div></div>
+        <span class="progress-pill-text" id="overall-progress-text">0%</span>
+      </div>
+
+      <!-- Server Status Dot -->
+      <span class="server-status-dot" id="server-status-pill" title="Checking server status..."></span>
     </div>
   </header>
 
-  <!-- BFS Next Up Recommendation Banner -->
-  <div class="next-up-banner" id="next-up-banner">
-    <div class="next-up-info">
-      <span class="next-up-tag" id="next-up-tag">BFS QUEUE</span>
-      <div class="next-up-text">
-        <span class="next-up-title" id="next-up-title">Calculating next BFS milestone...</span>
-        <span class="next-up-subtitle" id="next-up-subtitle"></span>
-      </div>
-    </div>
-    <button class="btn-jump-next" id="btn-jump-next">➔ Jump to Station</button>
-  </div>
+  <!-- Focused Graph Stage -->
+  <main class="graph-main">
+    <div class="graph-stage" id="graph-stage">
+      <svg class="graph-svg" id="graph-svg"></svg>
+      <div class="graph-content-layer" id="graph-content-layer">
+        <!-- Active Parent Node Center -->
+        <div class="graph-parent-anchor" id="graph-parent-anchor"></div>
 
-  <!-- Main Roadmap Container -->
-  <main>
-    <!-- Node View Header & Action Buttons -->
-    <div class="node-header-banner">
-      <div class="node-header-top-row">
-        <div class="node-badges-group" id="node-badges">
-          <!-- Badges injected dynamically: depth, category, status -->
-        </div>
-        <div class="view-mode-toggle" id="view-mode-toggle" style="display: none;">
-          <button class="btn-toggle active" id="btn-view-swimlanes" title="Side-by-side parallel track view">☷ Swimlanes</button>
-          <button class="btn-toggle" id="btn-view-road" title="Linear road line view">≡ Road View</button>
-        </div>
+        <!-- Immediate Child Nodes Cluster -->
+        <div class="graph-children-anchor" id="graph-children-anchor"></div>
       </div>
-
-      <h1 class="node-title" id="node-title">Loading Node...</h1>
-      <p class="node-description" id="node-desc"></p>
-
-      <!-- Node Header Actions (Top of Node View, above child roads) -->
-      <div class="node-header-actions">
-        <button class="btn-node-action btn-action-info" id="btn-open-info">
-          <span class="action-icon">ℹ️</span>
-          <span>Node Info & Details</span>
-        </button>
-        <button class="btn-node-action btn-action-summary" id="btn-open-summary">
-          <span class="action-icon">📝</span>
-          <span>Node Summary & Notes</span>
-          <span class="badge-disk-status" id="header-summary-badge">Disk Synced</span>
-        </button>
-        <div class="node-quick-status" id="node-quick-status">
-          <span class="quick-status-label">Status:</span>
-          <select id="select-quick-status" class="select-status">
-            <option value="todo">To Do</option>
-            <option value="in-progress">In Progress</option>
-            <option value="completed">Completed ✓</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <!-- Child Roads Section -->
-    <div class="child-roads-section" id="child-roads-section">
-      <div class="child-roads-header">
-        <h2 class="child-roads-title" id="child-roads-title">Child Roads & Sub-Stations</h2>
-        <span class="child-roads-count" id="child-roads-count">0 Stations</span>
-      </div>
-      <div id="roadmap-container"></div>
     </div>
   </main>
 
@@ -177,15 +136,6 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script src="libs/auto-render.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
-
-  <!-- Legacy Static Registries as Local Fallbacks -->
-  <script src="data/nodes/root.js"></script>
-  <script src="data/nodes/tech.js"></script>
-  <script src="data/nodes/core-cs.js"></script>
-  <script src="data/nodes/swe.js"></script>
-  <script src="data/nodes/data.js"></script>
-  <script src="data/nodes/ai.js"></script>
-  <script src="data/nodes/fusion.js"></script>
 
   <!-- App Core Engine -->
   <script src="app.js"></script>

@@ -1,0 +1,17 @@
+{
+  "id": "networking",
+  "title": "Computer Networking & Protocols",
+  "badge": "Module 03",
+  "depth": 2,
+  "description": "TCP/IP stack, DNS, HTTP/1.1 vs HTTP/2 vs HTTP/3, TLS/SSL, and WebSockets.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "High Performance Browser Networking",
+      "url": "https://hpbn.co/"
+    }
+  ],
+  "concept": "Every web, data, and AI service communicates over networks; protocol knowledge dictates latency and reliability.",
+  "activeRecall": "Walk through the 3-way TCP handshake and how TLS 1.3 optimizes the crypto handshake."
+}

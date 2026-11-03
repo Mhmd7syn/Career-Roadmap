@@ -5,7 +5,11 @@
   "depth": 1,
   "description": "Continuous cross-domain projects combining SWE + Data + AI at key milestones.",
   "status": "todo",
-  "children": [],
+  "children": [
+    "fusion-01",
+    "fusion-02",
+    "fusion-03"
+  ],
   "resources": [
     {
       "label": "FastAPI + Docker Template",

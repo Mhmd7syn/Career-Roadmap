@@ -7,10 +7,10 @@
 - **[LEARNING_ENGINE.md](file:///D:/Career%20Roadmap/docs/LEARNING_ENGINE.md)** — 3-pass loop and resource engine.
 
 ## Priority #1: Foundation
-- **[Core CS Foundations](file:///D:/Career%20Roadmap/docs/pillars/core-cs.md)** — Algorithms, OS, Networking, Git, Systems.
+- **[Core CS Foundations](file:///D:/Career%20Roadmap/graph/tech/core-cs/summary.md)** — Algorithms, OS, Networking, Git, Systems.
 
 ## Parallel Sub-Master Hubs & Projects
-- **[SWE Sub-Master](file:///D:/Career%20Roadmap/docs/pillars/pillar-1-swe.md)** — Backend, DBs, Docker, CI/CD, Systems.
-- **[Data Sub-Master](file:///D:/Career%20Roadmap/docs/pillars/pillar-2-data.md)** — SQL, BI, Pipelines, Warehouse, Big Data.
-- **[AI Sub-Master](file:///D:/Career%20Roadmap/docs/pillars/pillar-3-ai.md)** — ML, DL, CV, NLP, GenAI, MLOps.
-- **[Fusion Projects](file:///D:/Career%20Roadmap/docs/pillars/fusion-projects.md)** — Continuous milestone projects combining all 3.
+- **[SWE Sub-Master](file:///D:/Career%20Roadmap/graph/tech/swe/summary.md)** — Backend, DBs, Docker, CI/CD, Systems.
+- **[Data Sub-Master](file:///D:/Career%20Roadmap/graph/tech/data/summary.md)** — SQL, BI, Pipelines, Warehouse, Big Data.
+- **[AI Sub-Master](file:///D:/Career%20Roadmap/graph/tech/ai/summary.md)** — ML, DL, CV, NLP, GenAI, MLOps.
+- **[Fusion Projects](file:///D:/Career%20Roadmap/graph/tech/fusion/summary.md)** — Continuous milestone projects combining all 3.

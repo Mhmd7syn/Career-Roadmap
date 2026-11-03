@@ -26,30 +26,31 @@ D:\Career Roadmap\
 
 ---
 
-## Visual Presentation: Node View Layout
+## Visual Presentation: Local Graph Shape & Splitting Canvas
 
-When viewing any node (e.g. `Tech`, `Core CS`, or `Algorithms`):
+When viewing any station (e.g. `Tech`, `Core CS`, or `Algorithms`):
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│ Breadcrumbs: Home / Tech / Core CS                                     │
-│ Node Title: Track 0: Core CS Foundations                               │
-│ Description: Algorithms, operating systems, networking, and systems.   │
-├────────────────────────────────────────────────────────────────────────┤
-│ Header Action Buttons:                                                 │
-│ [ ℹ️ Node Info & Details ]       [ 📝 View / Edit Summary.md ]         │
+│ ←  Tech / Core CS                        [Next: OS ➔]  [● 25%]  (•)   │
 └────────────────────────────────────────────────────────────────────────┘
 
-┌────────────────────────────────────────────────────────────────────────┐
-│ Child Roads / Sub-Lanes Below:                                         │
-│ ├── [01. Algorithms & Data Structures] ─────────────────────────────── │
-│ ├── [02. Operating Systems & Systems]  ─────────────────────────────── │
-│ ├── [03. Computer Networking]          ─────────────────────────────── │
-│ └── [04. Software Craftsmanship]       ─────────────────────────────── │
-└────────────────────────────────────────────────────────────────────────┘
+                         ┌───────────────────────┐
+                         │      [◐ In Progress]  │
+                         │ Track 0: Core CS      │
+                         │ [ 📝 Summary ] [ ℹ️ Info ] │
+                         └───────────┬───────────┘
+                                     │
+               ┌─────────────┬───────┴───────┬─────────────┐
+               │ (Bezier)    │ (Bezier)      │ (Bezier)    │ (Bezier)
+               ▼             ▼               ▼             ▼
+       ┌──────────────┐┌──────────────┐┌──────────────┐┌──────────────┐
+       │● 01. Algo/DS ││○ 02. OS      ││○ 03. Network ││○ 04. Crafts  │
+       └──────────────┘└──────────────┘└──────────────┘└──────────────┘
 ```
-- Clicking **`[ ℹ️ Node Info ]`** opens a clean drawer with metadata, status, resources, and recall checks.
-- Clicking **`[ 📝 Node Summary ]`** opens the rendered `summary.md` with rich markdown (bold, code, images, math) and inline editing.
-- Clicking any **Child Road Block** navigates down into that child's view, which displays its own header buttons and child roads.
+- **Zero Description Clutter:** Child stations display strictly their status dot, index, clean title, and sub-station count. All descriptions and paragraphs are omitted from the canvas.
+- **Immediate Tools:** Active node hosts its 1-click status cycle toggle and direct `[ 📝 Summary ]` and `[ ℹ️ Info ]` buttons.
+- **Node Splitting & Moving Animation:** Clicking any child smoothly glides it up to the parent position; new child stations split out organically with staggered spring elasticity.
+- **No Global Pan/Zoom Bloat:** Strictly localized sub-graph view for instantaneous rendering, zero lag, and minimal cognitive load.
 
 ---
 
