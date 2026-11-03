@@ -22,18 +22,16 @@
     </div>
 
     <div class="header-right">
-      <!-- Compact BFS Next Milestone Pill -->
-      <button class="next-pill" id="next-up-pill" style="display: none;" title="Next BFS Priority">
-        <span class="next-pill-prefix">Next:</span>
-        <span class="next-pill-title" id="next-pill-title">...</span>
-        <span class="next-pill-arrow">➔</span>
-      </button>
-
       <!-- Overall Progress -->
       <div class="progress-pill" id="overall-progress-pill" title="Overall Graph Completion">
         <div class="progress-pill-bar"><div class="progress-pill-fill" id="overall-progress-fill"></div></div>
         <span class="progress-pill-text" id="overall-progress-text">0%</span>
       </div>
+
+      <!-- Quick Action: Create Child under current node -->
+      <button class="btn-header-action" id="btn-header-add-child" title="Create child station under current node">
+        ➕ Add Child
+      </button>
 
       <!-- Server Status Dot -->
       <span class="server-status-dot" id="server-status-pill" title="Checking server status..."></span>
@@ -59,12 +57,20 @@
   <aside class="drawer" id="drawer">
     <div class="drawer-header">
       <div class="drawer-title-group">
-        <span class="drawer-kicker">Node Details & Inspection</span>
+        <span class="drawer-kicker" id="drawer-kicker">Station Inspection</span>
         <h2 class="drawer-title" id="drawer-title">Station Details</h2>
       </div>
-      <button class="drawer-close" id="drawer-close" title="Close drawer">&times;</button>
+      <div class="drawer-header-controls">
+        <div class="drawer-mode-tabs">
+          <button class="btn-drawer-tab active" id="btn-drawer-tab-view" title="View details">👁️ View</button>
+          <button class="btn-drawer-tab" id="btn-drawer-tab-edit" title="Edit station info">✏️ Edit</button>
+        </div>
+        <button class="drawer-close" id="drawer-close" title="Close drawer">&times;</button>
+      </div>
     </div>
-    <div class="drawer-body">
+
+    <!-- Drawer View Pane -->
+    <div class="drawer-body" id="drawer-view-pane">
       <div>
         <div class="drawer-section-title">Completion Status</div>
         <div class="status-buttons-group">
@@ -75,7 +81,124 @@
       </div>
       <div id="drawer-body-content"></div>
     </div>
+
+    <!-- Drawer Edit Pane -->
+    <div class="drawer-body" id="drawer-edit-pane" style="display: none;">
+      <form id="drawer-edit-form" class="drawer-edit-form">
+        <div class="form-group">
+          <label class="form-label" for="drawer-edit-title">Station Title <span class="required">*</span></label>
+          <input type="text" id="drawer-edit-title" class="form-input" required autocomplete="off">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label" for="drawer-edit-badge">Badge / Category</label>
+            <input type="text" id="drawer-edit-badge" class="form-input" placeholder="Module">
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label" for="drawer-edit-status">Status</label>
+            <select id="drawer-edit-status" class="form-select">
+              <option value="todo">To Do</option>
+              <option value="in-progress">In Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="drawer-edit-desc">Description</label>
+          <textarea id="drawer-edit-desc" class="form-textarea" rows="3" placeholder="Station summary or objectives..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="drawer-edit-concept">Core Mental Model (Concept)</label>
+          <textarea id="drawer-edit-concept" class="form-textarea" rows="3" placeholder="Key concept or architectural principle..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="drawer-edit-recall">Active Recall Question</label>
+          <textarea id="drawer-edit-recall" class="form-textarea" rows="2" placeholder="Self-test question to challenge recall..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <div class="form-section-header">
+            <label class="form-label mb-0">External Link Resources</label>
+            <button type="button" class="btn-text-action" id="btn-add-resource-link">➕ Add Link</button>
+          </div>
+          <div class="resources-edit-list" id="resources-edit-list"></div>
+        </div>
+
+        <div class="drawer-edit-footer">
+          <span class="drawer-save-status" id="drawer-save-status"></span>
+          <div class="drawer-edit-actions">
+            <button type="button" class="btn-secondary" id="btn-cancel-drawer-edit">Cancel</button>
+            <button type="submit" class="btn-primary" id="btn-save-drawer-edit">💾 Save Changes</button>
+          </div>
+        </div>
+      </form>
+    </div>
   </aside>
+
+  <!-- Modal / Full Overlay: Add Child Station -->
+  <div class="modal-overlay" id="add-child-modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-kicker">New Directory Station</span>
+          <h2 class="modal-title">➕ Add Child Station</h2>
+          <span class="modal-parent-context" id="add-child-parent-label">Under: Parent Station</span>
+        </div>
+        <button class="modal-close" id="btn-close-add-child">&times;</button>
+      </div>
+
+      <form id="form-add-child" class="modal-form">
+        <div class="form-group">
+          <label class="form-label" for="new-child-title">Station Title <span class="required">*</span></label>
+          <input type="text" id="new-child-title" class="form-input" placeholder="e.g. Distributed Caching & Redis" required autocomplete="off">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label" for="new-child-id">Folder / Station ID <span class="required">*</span></label>
+            <input type="text" id="new-child-id" class="form-input font-mono" placeholder="distributed-caching" required autocomplete="off">
+            <span class="form-hint" id="new-child-path-preview">Path: graph/...</span>
+          </div>
+          <div class="form-group" style="width: 140px;">
+            <label class="form-label" for="new-child-badge">Badge</label>
+            <input type="text" id="new-child-badge" class="form-input" value="Module">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-child-desc">Description</label>
+          <textarea id="new-child-desc" class="form-textarea" rows="2" placeholder="Overview of topics and milestones covered..."></textarea>
+        </div>
+
+        <details class="form-details-collapsible">
+          <summary class="form-details-summary">Advanced: Mental Model & Active Recall</summary>
+          <div class="form-group mt-2">
+            <label class="form-label" for="new-child-concept">Core Mental Model (Concept)</label>
+            <textarea id="new-child-concept" class="form-textarea" rows="2" placeholder="Key invariant or mental model..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-child-recall">Active Recall Question</label>
+            <textarea id="new-child-recall" class="form-textarea" rows="2" placeholder="Question to verify understanding..."></textarea>
+          </div>
+        </details>
+
+        <div class="modal-footer">
+          <span class="modal-status" id="add-child-status"></span>
+          <div class="modal-footer-actions">
+            <button type="button" class="btn-secondary" id="btn-cancel-add-child">Cancel</button>
+            <button type="submit" class="btn-primary" id="btn-submit-add-child">➕ Create Station</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Hidden File Input for Resource Uploads directly into node folder -->
+  <input type="file" id="resource-file-input" style="display: none;" multiple>
 
   <!-- Modal / Full Overlay: Rich Markdown Summary & Disk Editor -->
   <div class="summary-modal-overlay" id="summary-modal-overlay">

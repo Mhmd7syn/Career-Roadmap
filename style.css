@@ -1212,3 +1212,545 @@ body {
 .btn-secondary:hover {
   background: var(--bg-hover);
 }
+
+
+/* ==========================================================================
+   Header Actions, Mode Tabs & Buttons
+   ========================================================================== */
+.btn-header-action {
+  background: rgba(56, 139, 253, 0.15);
+  border: 1px solid rgba(56, 139, 253, 0.4);
+  color: #79c0ff;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.btn-header-action:hover {
+  background: var(--accent-blue);
+  color: #fff;
+  border-color: var(--accent-blue-hover);
+}
+
+.drawer-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.drawer-mode-tabs {
+  display: flex;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.btn-drawer-tab {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-drawer-tab:hover {
+  color: var(--text-primary);
+}
+
+.btn-drawer-tab.active {
+  background: var(--bg-card);
+  color: var(--accent-blue);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* ==========================================================================
+   Universal Form & Input Styling
+   ========================================================================== */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.form-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.form-label .required {
+  color: #f85149;
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: var(--font-family);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2);
+}
+
+.form-textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.form-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+.font-mono {
+  font-family: var(--font-mono) !important;
+}
+
+.btn-primary {
+  background: var(--accent-blue);
+  color: #fff;
+  border: 1px solid var(--accent-blue-hover);
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.btn-primary:hover {
+  background: var(--accent-blue-hover);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+.btn-text-action {
+  background: none;
+  border: none;
+  color: var(--accent-blue);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.btn-text-action:hover {
+  text-decoration: underline;
+  background: rgba(56, 139, 253, 0.1);
+}
+
+.form-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.mb-0 {
+  margin-bottom: 0 !important;
+}
+
+.mt-2 {
+  margin-top: 8px !important;
+}
+
+/* ==========================================================================
+   Drawer Edit Form & Resource Rows
+   ========================================================================== */
+.drawer-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resources-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resource-edit-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.resource-edit-row .form-input {
+  font-size: 0.82rem;
+  padding: 6px 10px;
+}
+
+.btn-remove-row {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-remove-row:hover {
+  border-color: #f85149;
+  color: #f85149;
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.drawer-edit-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.drawer-save-status {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.drawer-edit-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ==========================================================================
+   Resources List in View Mode (Files & Links)
+   ========================================================================== */
+.resource-file-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 12px;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  color: var(--text-primary);
+}
+
+.resource-file-card:hover {
+  border-color: var(--accent-blue);
+  background: var(--bg-hover);
+  transform: translateX(2px);
+}
+
+.resource-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.resource-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.resource-name {
+  font-size: 0.86rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resource-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.resource-tag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.resource-tag.tag-file {
+  background: rgba(56, 139, 253, 0.15);
+  color: #79c0ff;
+  border: 1px solid rgba(56, 139, 253, 0.3);
+}
+
+.resource-tag.tag-link {
+  background: rgba(163, 113, 247, 0.15);
+  color: #d2a8ff;
+  border: 1px solid rgba(163, 113, 247, 0.3);
+}
+
+.resource-size {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.btn-upload-file-resource {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  color: var(--text-secondary);
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.btn-upload-file-resource:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: rgba(56, 139, 253, 0.05);
+}
+
+/* ==========================================================================
+   Add Child Card & Child Node Action Triggers
+   ========================================================================== */
+.add-child-card {
+  border: 1px dashed rgba(56, 139, 253, 0.5) !important;
+  background: rgba(56, 139, 253, 0.04) !important;
+  color: #79c0ff !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+}
+
+.add-child-card:hover {
+  border-color: var(--accent-blue) !important;
+  background: rgba(56, 139, 253, 0.12) !important;
+  box-shadow: 0 0 16px rgba(56, 139, 253, 0.25) !important;
+  transform: translateY(-3px) scale(1.02) !important;
+}
+
+.add-child-plus {
+  font-size: 1rem;
+}
+
+.add-child-label {
+  font-weight: 600 !important;
+  color: #79c0ff !important;
+}
+
+.btn-child-quick-info {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.88rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0.65;
+  transition: all 0.15s ease;
+  line-height: 1;
+  margin-left: auto;
+}
+
+.graph-child-node:hover .btn-child-quick-info {
+  opacity: 1;
+}
+
+.btn-child-quick-info:hover {
+  color: var(--accent-blue);
+  transform: scale(1.2);
+}
+
+/* ==========================================================================
+   Modal Overlay & Card
+   ========================================================================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(3px);
+  z-index: 300;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-card {
+  width: 580px;
+  max-width: 95vw;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalPop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes modalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: var(--bg-card);
+}
+
+.modal-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modal-kicker {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-blue);
+  font-weight: 700;
+}
+
+.modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.modal-parent-context {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+}
+
+.modal-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-details-collapsible {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  margin-top: 4px;
+}
+
+.form-details-summary {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+
+.form-details-summary:hover {
+  color: var(--accent-blue);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-status {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.modal-footer-actions {
+  display: flex;
+  gap: 10px;
+}

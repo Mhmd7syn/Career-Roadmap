@@ -22,4 +22,7 @@ desktop.ini
 # Temporary & Log files
 *.log
 *.tmp
-/graphify-out
+
+# Graphify Output
+graphify-out/
+.graphify*
