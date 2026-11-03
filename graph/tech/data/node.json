@@ -5,12 +5,7 @@
   "depth": 1,
   "description": "Analytics, advanced SQL, data modeling, automated ETL/ELT pipelines, and distributed big data.",
   "status": "todo",
-  "children": [
-    "data-analytics",
-    "data-warehousing",
-    "data-pipelines",
-    "data-bigdata"
-  ],
+  "children": [],
   "resources": [
     {
       "label": "Mode Analytics SQL Tutorial",

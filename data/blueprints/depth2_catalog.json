@@ -1,0 +1,440 @@
+{
+  "core-cs": [
+    {
+      "id": "algo-ds",
+      "metadata": {
+        "id": "algo-ds",
+        "title": "Algorithms & Data Structures",
+        "badge": "Module 01",
+        "depth": 2,
+        "description": "Asymptotic complexity, core data structures, and algorithmic traversal patterns.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "NeetCode 150 Roadmap",
+            "url": "https://neetcode.io/roadmap"
+          },
+          {
+            "label": "Big-O Cheat Sheet",
+            "url": "https://www.bigocheatsheet.com/"
+          }
+        ],
+        "concept": "Mastering algorithmic time and space trade-offs allows designing systems that scale gracefully under exponential load.",
+        "activeRecall": "Compare Array vs Linked List vs Hash Table for read, insertion, and deletion complexity."
+      },
+      "summary": "# Algorithms & Data Structures\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 0 Core CS\n\n### Core Mental Models\n1. **Asymptotic Growth:** Differentiating $\\mathcal{O}(1)$, $\\mathcal{O}(\\log N)$, $\\mathcal{O}(N)$, $\\mathcal{O}(N \\log N)$, and $\\mathcal{O}(N^2)$.\n2. **Contiguous Memory vs Pointer Nodes:** Cache locality favors arrays; linked structures cause CPU cache misses.\n3. **Hash Collisions:** Open addressing vs chaining; amortized $\\mathcal{O}(1)$ lookups.\n\n### Code Demonstration: BFS Graph Traversal\n```python\nfrom collections import deque\n\ndef bfs(graph: dict[str, list[str]], start: str) -> list[str]:\n    visited = {start}\n    queue = deque([start])\n    order = []\n    \n    while queue:\n        node = queue.popleft()\n        order.append(node)\n        for neighbor in graph.get(node, []):\n            if neighbor not in visited:\n                visited.add(neighbor)\n                queue.append(neighbor)\n    return order\n```\n\n### Active Recall Challenge\n- *What happens to hash table lookup performance when the load factor $\\alpha = N / \\text{buckets}$ exceeds 0.75?*\n"
+    },
+    {
+      "id": "craftsmanship",
+      "metadata": {
+        "id": "craftsmanship",
+        "title": "Software Craftsmanship & Tooling",
+        "badge": "Module 04",
+        "depth": 2,
+        "description": "Advanced Git workflows, Clean Code, SOLID principles, testing, and debugging.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Pro Git Book (Official)",
+            "url": "https://git-scm.com/book/en/v2"
+          }
+        ],
+        "concept": "High craftsmanship turns raw code into readable, maintainable, team-ready engineering assets.",
+        "activeRecall": "When is git rebase preferred over git merge, and why should you never rebase public shared branches?"
+      },
+      "summary": "# Software Craftsmanship & Tooling\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 0 Core CS\n\n### Core Mental Models\n1. **Git Directed Acyclic Graph (DAG):** Commits are immutable snapshots with parent hashes; branches are lightweight movable pointers.\n2. **Surgical Testing:** Pytest parameterization, fixtures, mock external network boundaries, test observability.\n3. **Refactoring Discipline:** Small atomic steps, verify with test suite, avoid premature abstractions.\n"
+    },
+    {
+      "id": "networking",
+      "metadata": {
+        "id": "networking",
+        "title": "Computer Networking & Protocols",
+        "badge": "Module 03",
+        "depth": 2,
+        "description": "TCP/IP stack, DNS, HTTP/1.1 vs HTTP/2 vs HTTP/3, TLS/SSL, and WebSockets.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "High Performance Browser Networking",
+            "url": "https://hpbn.co/"
+          }
+        ],
+        "concept": "Every web, data, and AI service communicates over networks; protocol knowledge dictates latency and reliability.",
+        "activeRecall": "Walk through the 3-way TCP handshake and how TLS 1.3 optimizes the crypto handshake."
+      },
+      "summary": "# Computer Networking & Protocols\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 0 Core CS\n\n### Core Mental Models\n1. **OSI vs TCP/IP:** Layer 4 Transport (TCP, UDP) vs Layer 7 Application (HTTP, DNS, gRPC).\n2. **Head-of-Line Blocking:** HTTP/1.1 pipelining block $\\to$ HTTP/2 TCP packet block $\\to$ HTTP/3 QUIC (UDP) independent streams.\n3. **TLS 1.3 Zero-RTT:** Resumption handshakes reduce initial latency by a full round-trip time.\n"
+    },
+    {
+      "id": "systems-os",
+      "metadata": {
+        "id": "systems-os",
+        "title": "Operating Systems & Systems",
+        "badge": "Module 02",
+        "depth": 2,
+        "description": "Processes, threads, concurrency, virtual memory, and Linux systems programming.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Operating Systems: Three Easy Pieces (Free Book)",
+            "url": "https://pages.cs.wisc.edu/~remzi/OSTEP/"
+          }
+        ],
+        "concept": "Understanding how the OS manages CPU and RAM prevents memory leaks, race conditions, and blocking bottlenecks.",
+        "activeRecall": "What happens during a context switch at the CPU register and memory cache level?"
+      },
+      "summary": "# Operating Systems & Systems\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 0 Core CS\n\n### Core Mental Models\n1. **Process vs Thread:** Processes own address spaces, page tables, and file descriptors. Threads share address spaces and heap, with individual stacks.\n2. **Virtual Memory & Page Tables:** Hardware MMU translates virtual pages to physical frames; page faults trigger disk/swap I/O.\n3. **Linux Concurrency:** Mutexes, semaphores, atomic operations, and preventing deadlocks (Coffman conditions).\n\n### Systems Invariant\n- **Context Switch Penalty:** Involves saving CPU register state, switching kernel stack, updating CR3 register (TLB flush), and cache invalidation.\n"
+    }
+  ],
+  "swe": [
+    {
+      "id": "swe-backend",
+      "metadata": {
+        "id": "swe-backend",
+        "title": "Backend Frameworks & API Design",
+        "badge": "SWE-01",
+        "depth": 2,
+        "description": "RESTful API standards, FastAPI / Go, async I/O event loops, and OAuth2 security.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "FastAPI Official Documentation",
+            "url": "https://fastapi.tiangolo.com/"
+          }
+        ],
+        "concept": "APIs are the contract between clients and services; robust design requires strict input validation and clean error handling.",
+        "activeRecall": "What is the performance difference between CPU-bound tasks and I/O-bound tasks in async web frameworks?"
+      },
+      "summary": "# Backend Frameworks & API Design\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 1 Software Engineering\n\n### Core Mental Models\n1. **Async Event Loop:** Co-operative multitasking; non-blocking socket I/O lets a single thread serve thousands of concurrent clients.\n2. **Input Validation Contracts:** Pydantic schemas enforce type safety and sanitization before request handlers run.\n3. **Stateless Authentication:** JWT with asymmetric RSA/Ed25519 signatures enables distributed verification without DB lookups.\n"
+    },
+    {
+      "id": "swe-databases",
+      "metadata": {
+        "id": "swe-databases",
+        "title": "Databases & Persistent Storage",
+        "badge": "SWE-02",
+        "depth": 2,
+        "description": "PostgreSQL schema modeling, indexing (B-Tree/GIN), ACID transactions, and Redis caching.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Use The Index, Luke!",
+            "url": "https://use-the-index-luke.com/"
+          }
+        ],
+        "concept": "The database is almost always the scalability bottleneck in production; proper schema design and indexing are mandatory.",
+        "activeRecall": "Explain why a B-Tree index helps range queries and what happens when an index is added to an existing table."
+      },
+      "summary": "# Databases & Persistent Storage\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 1 Software Engineering\n\n### Core Mental Models\n1. **B-Tree Indexing:** Balanced multi-way search trees ensure $\\mathcal{O}(\\log N)$ lookups and range scans.\n2. **Transaction Isolation Levels:** Read Committed vs Repeatable Read vs Serializable (preventing dirty reads, non-repeatable reads, phantom reads).\n3. **Caching Topologies:** Cache-Aside with TTLs, write-through, and cache stampede mitigation (mutex locking / probabilistic early expiration).\n"
+    },
+    {
+      "id": "swe-devops",
+      "metadata": {
+        "id": "swe-devops",
+        "title": "Containerization & Environments",
+        "badge": "SWE-03",
+        "depth": 2,
+        "description": "Docker, multi-stage builds, Docker Compose, environment management, and cloud primitives.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Docker Official Guide",
+            "url": "https://docs.docker.com/get-started/"
+          }
+        ],
+        "concept": "Containers guarantee reproducibility across development, staging, and cloud production environments.",
+        "activeRecall": "How do Docker layers work with caching during docker build, and how should you order commands?"
+      },
+      "summary": "# Containerization & Environments\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 1 Software Engineering\n\n### Core Mental Models\n1. **Linux Primitives:** Namespaces provide isolation (PID, NET, MNT, IPC); cgroups enforce resource limits (CPU, RAM).\n2. **Multi-Stage Builds:** Compile and package in builder stage; copy only binaries/wheels to a minimal Alpine/Distroless runtime stage.\n3. **Environment Security:** Non-root execution (`USER appuser`), `.dockerignore`, secrets mounted via buildkit.\n"
+    },
+    {
+      "id": "swe-sysdesign",
+      "metadata": {
+        "id": "swe-sysdesign",
+        "title": "System Design Fundamentals",
+        "badge": "SWE-04",
+        "depth": 2,
+        "description": "Scalability, horizontal vs vertical scaling, load balancers, caching, and stateless services.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "System Design Primer",
+            "url": "https://github.com/donnemartin/system-design-primer"
+          }
+        ],
+        "concept": "System design transforms single-server scripts into fault-tolerant distributed applications.",
+        "activeRecall": "Describe the differences between cache-aside, write-through, and write-back caching strategies."
+      },
+      "summary": "# System Design Fundamentals\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 1 Software Engineering\n\n### Core Mental Models\n1. **Horizontal Scaling:** Stateless API instances behind round-robin or least-connections load balancers.\n2. **Database Scaling:** Read replicas, connection pooling (PgBouncer), vertical sharding, consistent hashing.\n3. **CAP Theorem:** Under network partition $P$, choose Consistency $C$ or Availability $A$.\n"
+    }
+  ],
+  "data": [
+    {
+      "id": "data-analytics",
+      "metadata": {
+        "id": "data-analytics",
+        "title": "Advanced SQL & Data Analytics",
+        "badge": "DATA-01",
+        "depth": 2,
+        "description": "Window functions, CTEs, Polars/Pandas data wrangling, and KPI metrics design.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Mode Analytics SQL Tutorial",
+            "url": "https://mode.com/sql-tutorial/"
+          }
+        ],
+        "concept": "High-leverage analytical SQL turns raw relational transactions into executive business intelligence and product metrics.",
+        "activeRecall": "What is the operational difference between RANK(), DENSE_RANK(), and ROW_NUMBER()?"
+      },
+      "summary": "# Advanced SQL & Data Analytics\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 2 Data Ecosystem\n\n### Core Mental Models\n1. **Window Frames:** `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` for cumulative metrics.\n2. **Recursive Common Table Expressions:** Traversing hierarchical trees and graphs in pure SQL.\n3. **Polars vs Pandas:** Apache Arrow columnar memory format, lazy execution graphs, multi-threaded SIMD speed.\n"
+    },
+    {
+      "id": "data-bigdata",
+      "metadata": {
+        "id": "data-bigdata",
+        "title": "Distributed Compute & Event Streaming",
+        "badge": "DATA-04",
+        "depth": 2,
+        "description": "Apache Spark / PySpark, cluster partitions, and Apache Kafka / Redpanda event streaming.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Spark Documentation",
+            "url": "https://spark.apache.org/docs/latest/"
+          }
+        ],
+        "concept": "When data exceeds single-machine RAM, distributed compute and event streams provide horizontal data scalability.",
+        "activeRecall": "How do Kafka partitions determine concurrency and ordering guarantees for consumers in a group?"
+      },
+      "summary": "# Distributed Compute & Event Streaming\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 2 Data Ecosystem\n\n### Core Mental Models\n1. **Spark Driver & Executors:** DAG scheduler divides jobs into stages at shuffle boundaries.\n2. **Kafka Partitioning:** Partitions are append-only ordered logs. Ordering is strictly guaranteed within a single partition.\n3. **Shuffle Tuning:** Avoiding data skew and expensive full network data shuffling.\n"
+    },
+    {
+      "id": "data-pipelines",
+      "metadata": {
+        "id": "data-pipelines",
+        "title": "Pipeline Orchestration & ETL/ELT",
+        "badge": "DATA-03",
+        "depth": 2,
+        "description": "Apache Airflow, Prefect, DAG scheduling, idempotent task design, and data contracts.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Apache Airflow Core Concepts",
+            "url": "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/"
+          }
+        ],
+        "concept": "Data pipelines must be idempotent: running the same pipeline twice on the same day must produce the same result without duplicate data.",
+        "activeRecall": "Why is idempotency critical in batch ETL pipelines, and how do backfills handle historical reprocessing?"
+      },
+      "summary": "# Pipeline Orchestration & ETL/ELT\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 2 Data Ecosystem\n\n### Core Mental Models\n1. **Idempotence Rule:** $f(f(x)) = f(x)$. Rerunning a task over a historical date partition overwrites cleanly instead of appending duplicates.\n2. **DAG Dependencies:** Task upstream/downstream relationships, sensors, dynamic task mapping.\n3. **Data Contracts:** Enforcing strict schema validation at the ingestion boundary before warehouse loading.\n"
+    },
+    {
+      "id": "data-warehousing",
+      "metadata": {
+        "id": "data-warehousing",
+        "title": "Data Warehousing & dbt Transformations",
+        "badge": "DATA-02",
+        "depth": 2,
+        "description": "Dimensional modeling (Kimball Star/Snowflake), dbt (data build tool), and Snowflake/BigQuery.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "dbt Fundamentals Course",
+            "url": "https://courses.getdbt.com/"
+          }
+        ],
+        "concept": "Modern data warehousing separates storage from compute, using dbt to apply software engineering practices to SQL.",
+        "activeRecall": "What is a Slowly Changing Dimension (SCD Type 2), and how does dbt handle snapshotting?"
+      },
+      "summary": "# Data Warehousing & dbt Transformations\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 2 Data Ecosystem\n\n### Core Mental Models\n1. **Star Schema:** Central Fact tables (events, metrics) surrounded by Dimension tables (users, products, dates).\n2. **dbt Transformation DAG:** Modularity via `ref()`, schema testing (`not_null`, `unique`), Jinja templating.\n3. **Storage vs Compute:** Columnar compression, partition pruning, and clustering keys in modern warehouses.\n"
+    }
+  ],
+  "ai": [
+    {
+      "id": "ai-classical",
+      "metadata": {
+        "id": "ai-classical",
+        "title": "Classical Machine Learning & Modeling",
+        "badge": "AI-01",
+        "depth": 2,
+        "description": "Scikit-Learn, regression, classification, tree ensembles (XGBoost/LightGBM), and evaluation metrics.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Scikit-Learn User Guide",
+            "url": "https://scikit-learn.org/stable/user_guide.html"
+          }
+        ],
+        "concept": "Before deploying billion-parameter models, classical ML offers fast, interpretable, cost-effective baselines.",
+        "activeRecall": "When would you prioritize optimizing Precision over Recall in an engineering application?"
+      },
+      "summary": "# Classical Machine Learning & Modeling\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 3 AI Landscape\n\n### Core Mental Models\n1. **Bias-Variance Trade-off:** High bias = underfitting; high variance = overfitting. Cross-validation guides optimal complexity.\n2. **Gradient Boosted Decision Trees:** Sequentially fitting trees to the pseudo-residuals of previous trees.\n3. **Metric Alignment:** Precision (low false positives) vs Recall (low false negatives) vs ROC-AUC.\n"
+    },
+    {
+      "id": "ai-deeplearning",
+      "metadata": {
+        "id": "ai-deeplearning",
+        "title": "Deep Learning & PyTorch Foundations",
+        "badge": "AI-02",
+        "depth": 2,
+        "description": "Tensors, computational graphs, autograd, forward/backward loops, and custom architectures.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "DeepLearning.AI PyTorch Courses",
+            "url": "https://www.coursera.org/specializations/deep-learning"
+          }
+        ],
+        "concept": "PyTorch is the foundational language of modern AI research and production model training.",
+        "activeRecall": "Explain the role of the computational graph and how autograd calculates gradients backwards."
+      },
+      "summary": "# Deep Learning & PyTorch Foundations\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 3 AI Landscape\n\n### Core Mental Models\n1. **Autograd Engine:** Traces operations on tensors dynamically to construct reverse execution graphs for gradient computation via chain rule.\n2. **Optimizer Updates:** AdamW decouples weight decay from gradient updates: $\\theta_{t+1} = \\theta_t - \\eta \\cdot \\left(\\frac{\\hat{m}_t}{\\sqrt{\\hat{v}_t} + \\epsilon} + \\lambda \\theta_t\\right)$.\n3. **Training Loop Hygiene:** `model.train()` vs `model.eval()`, zeroing gradients, validation loss checkpoints.\n"
+    },
+    {
+      "id": "ai-genai",
+      "metadata": {
+        "id": "ai-genai",
+        "title": "Generative AI, RAG & Agentic Systems",
+        "badge": "AI-04",
+        "depth": 2,
+        "description": "Prompt engineering, structured outputs, Vector DBs (pgvector/Qdrant), RAG, and Agent loops.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "DeepLearning.AI RAG & Agents",
+            "url": "https://www.deeplearning.ai/short-courses/"
+          }
+        ],
+        "concept": "RAG grounds non-deterministic LLMs in factual private enterprise data without expensive re-training.",
+        "activeRecall": "What are the main failure modes of naïve RAG (chunk size, retrieval precision, lost in the middle)?"
+      },
+      "summary": "# Generative AI, RAG & Agentic Systems\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 3 AI Landscape\n\n### Core Mental Models\n1. **RAG Triad:** Context Relevance $\\to$ Groundedness $\\to$ Answer Relevance.\n2. **Hybrid Search:** Combining dense embeddings (semantic similarity) with sparse BM25 (keyword exact matches) plus re-ranking.\n3. **Agent Loop (ReAct):** Thought $\\to$ Action (Tool Call) $\\to$ Observation $\\to$ Final Synthesis.\n"
+    },
+    {
+      "id": "ai-mlops",
+      "metadata": {
+        "id": "ai-mlops",
+        "title": "Model Serving, Evals & Observability",
+        "badge": "AI-05",
+        "depth": 2,
+        "description": "vLLM, Ollama, quantization (GGUF/AWQ), Langfuse tracing, and Ragas evaluation frameworks.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "vLLM Documentation",
+            "url": "https://docs.vllm.ai/"
+          },
+          {
+            "label": "Langfuse Observability",
+            "url": "https://langfuse.com/"
+          }
+        ],
+        "concept": "You cannot improve what you cannot measure; production AI demands rigorous continuous evaluation and latency tracing.",
+        "activeRecall": "How does PagedAttention eliminate memory fragmentation in multi-request LLM serving?"
+      },
+      "summary": "# Model Serving, Evals & Observability\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 3 AI Landscape\n\n### Core Mental Models\n1. **PagedAttention:** Manages KV cache memory like OS virtual memory paging, eliminating internal/external memory fragmentation.\n2. **Quantization:** Reducing weights from FP16 $\\to$ INT8 or INT4 (AWQ/GPTQ) for lower VRAM footprints.\n3. **Tracing & Telemetry:** Monitoring token throughput, TTFT (time to first token), and output hallucination rates.\n"
+    },
+    {
+      "id": "ai-nlp-cv",
+      "metadata": {
+        "id": "ai-nlp-cv",
+        "title": "Transformers, NLP & Vision Architectures",
+        "badge": "AI-03",
+        "depth": 2,
+        "description": "Self-attention mechanism, multi-head attention, Hugging Face ecosystem, and tokenization.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "The Illustrated Transformer",
+            "url": "https://jalammar.github.io/illustrated-transformer/"
+          }
+        ],
+        "concept": "Transformers replaced sequential RNNs by computing attention across all input tokens in parallel.",
+        "activeRecall": "What is the physical intuition behind Queries, Keys, and Values in the scaled dot-product attention formula?"
+      },
+      "summary": "# Transformers, NLP & Vision Architectures\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Track 3 AI Landscape\n\n### Core Mental Models\n1. **Self-Attention:** Tokens query all other tokens in parallel.\n2. **KV Caching:** In autoregressive decoding, past Key and Value matrices are cached to prevent recomputing previous token representations.\n3. **Subword Tokenization:** Byte-Pair Encoding (BPE) balances vocabulary size with token coverage.\n"
+    }
+  ],
+  "fusion": [
+    {
+      "id": "fusion-01",
+      "metadata": {
+        "id": "fusion-01",
+        "title": "Milestone 1: The Core Triad Microservice",
+        "badge": "Milestone 1",
+        "depth": 2,
+        "description": "FastAPI backend + PostgreSQL + structured ingestion pipeline + embedded ML inference.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "FastAPI + Docker Production Template",
+            "url": "https://fastapi.tiangolo.com/deployment/docker/"
+          }
+        ],
+        "concept": "Binds clean backend architecture with reliable data schemas and model serving in a single production repository.",
+        "activeRecall": "How do you separate model loading lifecycle from HTTP request handling in an async API?"
+      },
+      "summary": "# Milestone 1: The Core Triad Microservice\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Milestone Fusion Projects\n\n### Architecture Blueprint\n- **SWE Pillar:** FastAPI async application with Pydantic validation and health endpoints.\n- **Data Pillar:** PostgreSQL database with Alembic schema migrations.\n- **AI Pillar:** Pre-trained Scikit-Learn / PyTorch model loaded once at application startup into memory.\n\n### Acceptance Criteria\n- [ ] Single `docker-compose up` launches web service and database.\n- [ ] Automated pytest integration suite passes with 100% green builds.\n- [ ] Sub-50ms P95 latency on inference endpoints under concurrency.\n"
+    },
+    {
+      "id": "fusion-02",
+      "metadata": {
+        "id": "fusion-02",
+        "title": "Milestone 2: Intelligent Data Application",
+        "badge": "Milestone 2",
+        "depth": 2,
+        "description": "Async task queues (Celery/Redis) + automated Airflow ETL + production RAG over warehouse data.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Celery Distributed Task Queue Guide",
+            "url": "https://docs.celeryq.dev/"
+          }
+        ],
+        "concept": "Demonstrates enterprise data orchestration powering a user-facing generative AI system.",
+        "activeRecall": "Why should heavy embedding and LLM calls run in background workers rather than synchronous API handlers?"
+      },
+      "summary": "# Milestone 2: Intelligent Data Application\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Milestone Fusion Projects\n\n### Architecture Blueprint\n- **SWE Pillar:** Celery worker pool with Redis broker, WebSockets for job status pushes.\n- **Data Pillar:** Airflow pipeline extracts, validates with Great Expectations, and stores in Postgres/pgvector.\n- **AI Pillar:** RAG pipeline generates chunk embeddings and queries vector indices with re-ranking.\n"
+    },
+    {
+      "id": "fusion-03",
+      "metadata": {
+        "id": "fusion-03",
+        "title": "Milestone 3: Real-Time AI Streaming System",
+        "badge": "Milestone 3",
+        "depth": 2,
+        "description": "gRPC/WebSocket backend + Kafka event streaming + vLLM serving + Langfuse observability.",
+        "status": "todo",
+        "children": [],
+        "resources": [
+          {
+            "label": "Kafka Streaming Reference",
+            "url": "https://kafka.apache.org/documentation/"
+          }
+        ],
+        "concept": "The capstone portfolio project qualifying you as a high-tier Tri-T Software & AI Systems Engineer.",
+        "activeRecall": "How does backpressure prevent downstream model inference servers from crashing during traffic spikes?"
+      },
+      "summary": "# Milestone 3: Real-Time AI Streaming System\n\n> **Structural Depth:** Depth $d=2$ | **Parent:** Milestone Fusion Projects\n\n### Architecture Blueprint\n- **SWE Pillar:** High-performance gRPC / streaming WebSockets backend.\n- **Data Pillar:** Apache Kafka event bus with consumer groups and backpressure handling.\n- **AI Pillar:** vLLM inference engine, Langfuse telemetry tracing token generation and latency.\n"
+    }
+  ]
+}

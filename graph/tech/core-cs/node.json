@@ -5,12 +5,7 @@
   "depth": 1,
   "description": "Algorithms, operating systems, networking protocols, and professional software craftsmanship.",
   "status": "todo",
-  "children": [
-    "algo-ds",
-    "systems-os",
-    "networking",
-    "craftsmanship"
-  ],
+  "children": [],
   "resources": [
     {
       "label": "NeetCode 150 Roadmap",

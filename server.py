@@ -3,6 +3,7 @@
 Career Knowledge Graph Local Server
 Powered by Python 3.14
 Serves static assets, graph nodes, and enables live disk saves of node notes and statuses.
+Supports parent-child status cascading and just-in-time child expansion.
 """
 
 import os
@@ -17,6 +18,7 @@ import threading
 
 BASE_DIR = Path(__file__).resolve().parent
 GRAPH_DIR = BASE_DIR / "graph"
+CATALOG_PATH = BASE_DIR / "data" / "blueprints" / "depth2_catalog.json"
 
 
 class GraphRequestHandler(SimpleHTTPRequestHandler):
@@ -45,7 +47,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
     def _resolve_graph_folder(self, raw_path: str) -> Path:
         """Resolve a node directory safely inside GRAPH_DIR."""
-        # Strip leading/trailing slashes and any graph/ prefix
         cleaned = raw_path.strip("/\\")
         if cleaned.startswith("graph/") or cleaned.startswith("graph\\"):
             cleaned = cleaned[6:]
@@ -82,7 +83,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(404, {"error": "graph directory does not exist"})
             return
 
-        # Walk all directories inside graph
         for root, dirs, files in os.walk(GRAPH_DIR):
             root_path = Path(root)
             node_file = root_path / "node.json"
@@ -90,7 +90,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 try:
                     with open(node_file, "r", encoding="utf-8") as f:
                         node_data = json.load(f)
-                    
+
                     summary_file = root_path / "summary.md"
                     rel_to_graph = root_path.relative_to(GRAPH_DIR).as_posix()
                     if rel_to_graph == ".":
@@ -169,6 +169,10 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._handle_save_status(payload)
         elif path == "/api/save-node":
             self._handle_save_node(payload)
+        elif path == "/api/add-child":
+            self._handle_add_child(payload)
+        elif path == "/api/expand-node":
+            self._handle_expand_node(payload)
         else:
             self._send_json(404, {"error": "API route not found"})
 
@@ -193,6 +197,63 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_json(400, {"error": str(e)})
 
+    def _cascade_status(self, node_dir: Path):
+        """
+        Status Cascading Rule:
+        - If all children of a parent are 'completed', parent is 'completed'.
+        - If not all children are 'completed' and parent was 'completed', parent becomes 'in-progress'.
+        Cascades up to ancestors.
+        """
+        curr = node_dir
+        while curr != GRAPH_DIR and curr.parent.is_relative_to(GRAPH_DIR):
+            parent_dir = curr.parent
+            parent_json_path = parent_dir / "node.json"
+            if not parent_json_path.exists():
+                break
+
+            try:
+                with open(parent_json_path, "r", encoding="utf-8") as f:
+                    parent_data = json.load(f)
+
+                children = parent_data.get("children", [])
+                if not children:
+                    break
+
+                all_completed = True
+                any_started = False
+
+                for cid in children:
+                    child_json_path = parent_dir / cid / "node.json"
+                    if child_json_path.exists():
+                        with open(child_json_path, "r", encoding="utf-8") as cf:
+                            cdata = json.load(cf)
+                        cstatus = cdata.get("status", "todo")
+                        if cstatus != "completed":
+                            all_completed = False
+                        if cstatus in ("in-progress", "completed"):
+                            any_started = True
+                    else:
+                        all_completed = False
+
+                old_status = parent_data.get("status", "todo")
+                new_status = old_status
+
+                if all_completed:
+                    new_status = "completed"
+                elif any_started or old_status == "completed":
+                    new_status = "in-progress"
+
+                if new_status != old_status:
+                    parent_data["status"] = new_status
+                    with open(parent_json_path, "w", encoding="utf-8") as f:
+                        json.dump(parent_data, f, indent=2, ensure_ascii=False)
+                    print(f"[Cascade]: {parent_json_path} -> {new_status}")
+
+                curr = parent_dir
+            except Exception as e:
+                print(f"[Cascade Error]: {e}", file=sys.stderr)
+                break
+
     def _handle_save_status(self, payload: dict):
         raw_path = payload.get("path", "")
         status = payload.get("status", "todo")
@@ -214,6 +275,10 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
             print(f"[Status Saved]: {node_json_path} -> {status}")
+
+            # Trigger cascade up to parent/ancestors
+            self._cascade_status(node_dir)
+
             self._send_json(200, {
                 "success": True,
                 "message": f"Status updated to '{status}'",
@@ -247,6 +312,139 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 "success": True,
                 "message": "node.json updated successfully",
                 "data": data
+            })
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_add_child(self, payload: dict):
+        parent_path = payload.get("parentPath", "")
+        child_id = payload.get("childId", "").strip()
+        title = payload.get("title", child_id)
+        description = payload.get("description", "")
+        badge = payload.get("badge", "Module")
+        concept = payload.get("concept", "")
+        active_recall = payload.get("activeRecall", "")
+        summary_content = payload.get("summary", f"# {title}\n\n> Add your notes here.\n")
+
+        if not child_id:
+            self._send_json(400, {"error": "childId is required"})
+            return
+
+        try:
+            parent_dir = self._resolve_graph_folder(parent_path)
+            parent_json_path = parent_dir / "node.json"
+
+            if not parent_json_path.exists():
+                self._send_json(404, {"error": f"Parent node not found at {parent_path}"})
+                return
+
+            with open(parent_json_path, "r", encoding="utf-8") as f:
+                parent_data = json.load(f)
+
+            # Rule: Adding child converts parent from completed to in-progress
+            if parent_data.get("status") == "completed":
+                parent_data["status"] = "in-progress"
+
+            children = parent_data.setdefault("children", [])
+            if child_id not in children:
+                children.append(child_id)
+
+            with open(parent_json_path, "w", encoding="utf-8") as f:
+                json.dump(parent_data, f, indent=2, ensure_ascii=False)
+
+            # Create child directory and files
+            child_dir = parent_dir / child_id
+            child_dir.mkdir(parents=True, exist_ok=True)
+
+            parent_depth = parent_data.get("depth", 0)
+            child_json_data = {
+                "id": child_id,
+                "title": title,
+                "badge": badge,
+                "depth": parent_depth + 1,
+                "description": description,
+                "status": "todo",
+                "children": [],
+                "resources": [],
+                "concept": concept,
+                "activeRecall": active_recall
+            }
+
+            with open(child_dir / "node.json", "w", encoding="utf-8") as f:
+                json.dump(child_json_data, f, indent=2, ensure_ascii=False)
+
+            with open(child_dir / "summary.md", "w", encoding="utf-8") as f:
+                f.write(summary_content)
+
+            print(f"[Child Created]: {child_dir} under {parent_path}")
+            self._send_json(200, {
+                "success": True,
+                "message": f"Child node '{child_id}' created under {parent_path}",
+                "child": child_json_data,
+                "parentStatus": parent_data.get("status")
+            })
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_expand_node(self, payload: dict):
+        """Expand node children from depth2_catalog.json upon returning to it."""
+        raw_path = payload.get("path", "")
+
+        try:
+            node_dir = self._resolve_graph_folder(raw_path)
+            node_json_path = node_dir / "node.json"
+
+            if not node_json_path.exists():
+                self._send_json(404, {"error": f"Node not found at {raw_path}"})
+                return
+
+            with open(node_json_path, "r", encoding="utf-8") as f:
+                node_data = json.load(f)
+
+            node_id = node_data.get("id", node_dir.name)
+
+            if not CATALOG_PATH.exists():
+                self._send_json(404, {"error": "Catalog file not found"})
+                return
+
+            with open(CATALOG_PATH, "r", encoding="utf-8") as f:
+                catalog = json.load(f)
+
+            track_modules = catalog.get(node_id, [])
+            if not track_modules:
+                self._send_json(404, {"error": f"No pre-configured modules for track '{node_id}'"})
+                return
+
+            # Rule: Adding new children converts parent from completed to in-progress
+            node_data["status"] = "in-progress"
+            children = node_data.setdefault("children", [])
+
+            created_modules = []
+            for item in track_modules:
+                mid = item["id"]
+                if mid not in children:
+                    children.append(mid)
+
+                mod_dir = node_dir / mid
+                mod_dir.mkdir(parents=True, exist_ok=True)
+
+                with open(mod_dir / "node.json", "w", encoding="utf-8") as f:
+                    json.dump(item["metadata"], f, indent=2, ensure_ascii=False)
+
+                with open(mod_dir / "summary.md", "w", encoding="utf-8") as f:
+                    f.write(item["summary"])
+
+                created_modules.append(mid)
+
+            with open(node_json_path, "w", encoding="utf-8") as f:
+                json.dump(node_data, f, indent=2, ensure_ascii=False)
+
+            print(f"[Node Expanded]: {node_id} expanded with {len(created_modules)} children")
+            self._send_json(200, {
+                "success": True,
+                "message": f"Expanded {len(created_modules)} child stations under {node_id}",
+                "children": created_modules,
+                "nodeStatus": "in-progress"
             })
         except Exception as e:
             self._send_json(400, {"error": str(e)})

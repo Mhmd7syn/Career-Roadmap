@@ -11,17 +11,26 @@
    - Once Depth 1 is completed, BFS dequeues Depth 2 children, then Depth 3, ensuring balanced parallel growth without getting stuck in a single branch.
 5. **Progressive Information Depth (Macro Parent $\to$ Micro Child):** Each node provides high-level general information, mental models, and broad orientation for its topic. Granular implementation details, edge cases, and deep specifics are reserved strictly for its child nodes.
 6. **Breadth Exhaustion Before Depth Progression:** Never advance or expand to a deeper level ($d+1$) until ensuring the current level ($d$) is completely populated with no remaining nodes to add across the breadth, unless the user explicitly requests to go deep into a specific node.
-7. **Node Page Header Actions:** At the top of each node view (above the child roads), direct action buttons provide immediate access:
+7. **Leaf-Node Learning Frontier:** Active learning, note taking, and revision occur strictly on the leaf nodes of the graph tree at the current BFS depth level.
+8. **Parent-Child Status Cascade & Expansion Lifecycle:**
+   - Level-by-level building: Nodes at Depth $d$ are studied and mastered as leaf nodes first, then marked `completed`.
+   - When returning to a completed node, its child nodes (Depth $d+1$) are created.
+   - **Adding new children automatically converts the parent from `completed` to `in-progress`.**
+   - **When all children of a parent are marked `completed`, the parent automatically converts to `completed`.**
+   - If any child reverts to `todo` or `in-progress`, the parent immediately reverts to `in-progress`.
+9. **Context-Aware Learning Progression:** At macro views (`Tech`/`Root`), the recommendation engine surfaces the global BFS queue. When drilled into a specific branch or node, it adapts to show the immediate local next station, enabling deep dives into a specific track while maintaining orientation.
+10. **Node Page Header Actions:** At the top of each node view (above the child roads), direct action buttons provide immediate access:
    - `[ ℹ️ Node Info & Details ]`
    - `[ 📝 Node Summary & Notes ]` (opens/edits `summary.md` with rich markdown).
    - Below these buttons, the child road lines/lanes are displayed.
-8. **Dual-View Presentation:**
+10. **Dual-View Presentation:**
    - **Macro View (Parallel Swimlanes):** At the Tech domain level, all 4 parallel tracks (`Core CS`, `SWE`, `Data`, `AI`) sit side-by-side.
    - **Recursive Road View:** Clicking any node navigates into its view, displaying its header buttons and child roads.
-9. **Python Local Server (`run.bat`):** Lightweight local runner (`server.py`) using Python 3.14 to eliminate CORS, serve markdown, and save edits directly to disk.
-10. **Just-in-Time Child Expansion:** Create subfolders and child stations only when actively reached in the BFS traversal.
-11. **Domain Encapsulation ("Tech" Super-Node):** Engineering tracks sit under `Tech`, leaving room for future peer domains (`Freelancing`, `Marketing`).
-12. **Folder Hygiene & Paced Collaboration:** Clean directory always; never generate new platform files without proposing, discussing, and agreeing first.
+11. **Python Local Server (`run.bat`):** Lightweight local runner (`server.py`) using Python 3.14 to eliminate CORS, serve markdown, and save edits directly to disk.
+12. **Just-in-Time Child Expansion:** Create subfolders and child stations only when actively reached in the BFS traversal.
+13. **Domain Encapsulation ("Tech" Super-Node):** Engineering tracks sit under `Tech`, leaving room for future peer domains (`Freelancing`, `Marketing`).
+14. **Folder Hygiene & Paced Collaboration:** Clean directory always; never generate new platform files without proposing, discussing, and agreeing first.
+15. **Minimalist UI & Direct Communication (Anti-Pollution Rule):** Zero unnecessary text, instructional paragraphs, or decorative fluff polluting the UI view. Keep all station cards, labels, action buttons, and agent responses brief, minimal, and direct.
 
 ---
 

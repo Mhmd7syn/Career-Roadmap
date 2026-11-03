@@ -5,12 +5,7 @@
   "depth": 1,
   "description": "Production backend architecture, APIs, databases, containerization, and system design.",
   "status": "todo",
-  "children": [
-    "swe-backend",
-    "swe-databases",
-    "swe-devops",
-    "swe-sysdesign"
-  ],
+  "children": [],
   "resources": [
     {
       "label": "FastAPI Official Documentation",

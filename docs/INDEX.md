@@ -1,6 +1,7 @@
 # Career Roadmap Index
 
 ## Architecture & System Rules
+- **[RULES.md](file:///D:/Career%20Roadmap/docs/RULES.md)** — Master system rules (progression, cascading, anti-pollution).
 - **[BUILD_PLAN.md](file:///D:/Career%20Roadmap/docs/BUILD_PLAN.md)** — Core rules, BFS traversal checklist, and architecture.
 - **[TARGET_ARCHITECTURE.md](file:///D:/Career%20Roadmap/docs/TARGET_ARCHITECTURE.md)** — Directory-as-Graph layout, Node View UI, and BFS model.
 - **[LEARNING_ENGINE.md](file:///D:/Career%20Roadmap/docs/LEARNING_ENGINE.md)** — 3-pass loop and resource engine.

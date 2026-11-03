@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo ===================================================================
 echo  Career Knowledge Graph Runner (Python 3.14)
-echo  Local Canvas & Graph-as-Directory Platform
+echo  Local Canvas - Graph-as-Directory Platform
 echo ===================================================================
 
 where python >nul 2>nul

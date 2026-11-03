@@ -1,6 +1,7 @@
 /**
  * Career Knowledge Graph Engine
- * Directory-as-Graph + BFS Traversal Engine + Live Disk Sync (Python 3.14)
+ * Directory-as-Graph + Context-Aware BFS Traversal Engine + Live Disk Sync (Python 3.14)
+ * Supports Parent-Child Status Cascading, Leaf-Node Learning, and Context-Aware Progression
  */
 (function () {
   'use strict';
@@ -16,13 +17,12 @@
   let activeNode = null;
   let currentSummaryContent = '';
   let viewMode = 'swimlanes'; // 'swimlanes' | 'road' for tech domain
-  let debounceTimeout = null;
 
   // The 4 Parallel Tracks + Fusion
   const PARALLEL_TRACKS = ['core-cs', 'swe', 'data', 'ai', 'fusion'];
 
   // ---------------------------------------------------------------------------
-  // 1. Persistence & Status Helpers
+  // 1. Persistence & Status Helpers with Status Cascading
   // ---------------------------------------------------------------------------
 
   function getSavedStatuses() {
@@ -45,10 +45,70 @@
     const statuses = getSavedStatuses();
     if (statuses[nodeId]) return statuses[nodeId];
 
-    // Check if status is present in node metadata
     const node = getNode(nodeId);
     if (node && node.status) return node.status;
     return 'todo';
+  }
+
+  function findParentNodeId(childId) {
+    for (const [nid, item] of Object.entries(graphManifest)) {
+      const meta = item.metadata;
+      if (meta && meta.children && meta.children.includes(childId)) {
+        return nid;
+      }
+    }
+    // Fallback checks
+    if (PARALLEL_TRACKS.includes(childId)) return 'tech';
+    if (['tech', 'freelancing', 'marketing'].includes(childId)) return 'root';
+    return null;
+  }
+
+  function cascadeStatusUpwards(nodeId) {
+    const parentId = findParentNodeId(nodeId);
+    if (!parentId || parentId === 'root') return;
+
+    const parentNode = getNode(parentId);
+    if (!parentNode || !parentNode.children || parentNode.children.length === 0) return;
+
+    const statuses = getSavedStatuses();
+    let allDone = true;
+    let anyActive = false;
+
+    for (const cid of parentNode.children) {
+      const cstatus = statuses[cid] || (getNode(cid) ? getNode(cid).status : 'todo');
+      if (cstatus !== 'completed') {
+        allDone = false;
+      }
+      if (cstatus === 'in-progress' || cstatus === 'completed') {
+        anyActive = true;
+      }
+    }
+
+    const currentParentStatus = statuses[parentId] || parentNode.status || 'todo';
+    let newParentStatus = currentParentStatus;
+
+    if (allDone) {
+      newParentStatus = 'completed';
+    } else if (anyActive || currentParentStatus === 'completed') {
+      newParentStatus = 'in-progress';
+    }
+
+    if (newParentStatus !== currentParentStatus) {
+      statuses[parentId] = newParentStatus;
+      parentNode.status = newParentStatus;
+      localStorage.setItem(STORAGE_STATUS_KEY, JSON.stringify(statuses));
+
+      if (isServerConnected) {
+        const parentRel = getNodeRelPath(parentId);
+        fetch('/api/save-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: parentRel, status: newParentStatus })
+        }).catch(err => console.warn('Parent cascade server save error:', err));
+      }
+
+      cascadeStatusUpwards(parentId);
+    }
   }
 
   async function setNodeStatus(nodeId, status) {
@@ -61,7 +121,6 @@
       node.status = status;
     }
 
-    // If connected to local server, save to node.json on disk
     if (isServerConnected) {
       const relPath = getNodeRelPath(nodeId);
       try {
@@ -75,11 +134,12 @@
       }
     }
 
+    cascadeStatusUpwards(nodeId);
+
     renderCurrentView();
     updateNextUpBanner();
     updateOverallProgress();
 
-    // Update status UI controls if open
     updateDrawerStatusButtons(status);
     const selectEl = document.getElementById('select-quick-status');
     if (selectEl) selectEl.value = status;
@@ -93,7 +153,6 @@
     if (graphManifest[nodeId] && graphManifest[nodeId].metadata) {
       return graphManifest[nodeId].metadata;
     }
-    // Fallback to RoadmapRegistry if available
     if (window.RoadmapRegistry && window.RoadmapRegistry[nodeId]) {
       return window.RoadmapRegistry[nodeId];
     }
@@ -104,7 +163,6 @@
     if (graphManifest[nodeId] && typeof graphManifest[nodeId].relPath === 'string') {
       return graphManifest[nodeId].relPath;
     }
-    // Fallback mapping
     const map = {
       'root': '',
       'tech': 'tech',
@@ -114,28 +172,7 @@
       'swe': 'tech/swe',
       'data': 'tech/data',
       'ai': 'tech/ai',
-      'fusion': 'tech/fusion',
-      // Depth 2
-      'algo-ds': 'tech/core-cs/algo-ds',
-      'systems-os': 'tech/core-cs/systems-os',
-      'networking': 'tech/core-cs/networking',
-      'craftsmanship': 'tech/core-cs/craftsmanship',
-      'swe-backend': 'tech/swe/swe-backend',
-      'swe-databases': 'tech/swe/swe-databases',
-      'swe-devops': 'tech/swe/swe-devops',
-      'swe-sysdesign': 'tech/swe/swe-sysdesign',
-      'data-analytics': 'tech/data/data-analytics',
-      'data-warehousing': 'tech/data/data-warehousing',
-      'data-pipelines': 'tech/data/data-pipelines',
-      'data-bigdata': 'tech/data/data-bigdata',
-      'ai-classical': 'tech/ai/ai-classical',
-      'ai-deeplearning': 'tech/ai/ai-deeplearning',
-      'ai-nlp-cv': 'tech/ai/ai-nlp-cv',
-      'ai-genai': 'tech/ai/ai-genai',
-      'ai-mlops': 'tech/ai/ai-mlops',
-      'fusion-01': 'tech/fusion/fusion-01',
-      'fusion-02': 'tech/fusion/fusion-02',
-      'fusion-03': 'tech/fusion/fusion-03'
+      'fusion': 'tech/fusion'
     };
     return map[nodeId] || nodeId;
   }
@@ -146,46 +183,62 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 3. BFS (Breadth-First Search) Traversal Engine
+  // 3. Context-Aware Learning Progression Engine (Local Branch vs Global BFS)
   // ---------------------------------------------------------------------------
 
-  function getBFSRecommendation() {
-    // 1. Depth 1 Survey Queue: Parallel Tracks under Tech
-    // Check Depth 1 nodes: core-cs, swe, data, ai, fusion
+  // Global BFS Queue (Macro balanced round-robin across tracks)
+  function getGlobalBFSRecommendation() {
     const depth1Nodes = PARALLEL_TRACKS.map(id => getNode(id)).filter(Boolean);
 
-    // Prioritize an 'in-progress' Depth 1 track
+    let hasDepth2Children = false;
     for (const track of depth1Nodes) {
-      const st = getNodeStatus(track.id);
-      if (st === 'in-progress') {
-        return {
-          node: track,
-          parent: getNode('tech'),
-          depth: 1,
-          tag: 'CYCLE 1: DEPTH 1 IN PROGRESS',
-          title: track.title,
-          subtitle: track.description || 'Continue macro survey across parallel tracks.'
-        };
+      if (track.children && track.children.length > 0) {
+        hasDepth2Children = true;
+        break;
       }
     }
 
-    // Next, find first 'todo' Depth 1 track
-    for (const track of depth1Nodes) {
-      const st = getNodeStatus(track.id);
-      if (st === 'todo') {
-        return {
-          node: track,
-          parent: getNode('tech'),
-          depth: 1,
-          tag: 'CYCLE 1: DEPTH 1 SURVEY',
-          title: track.title,
-          subtitle: track.description || 'Survey macro track orientation and review summary notes.'
-        };
+    // Phase 1: Depth 1 tracks as leaf nodes
+    if (!hasDepth2Children) {
+      for (const track of depth1Nodes) {
+        if (getNodeStatus(track.id) === 'in-progress') {
+          return {
+            node: track,
+            parent: getNode('tech'),
+            depth: 1,
+            isLeaf: true,
+            tag: 'GLOBAL: IN PROGRESS',
+            title: track.title,
+            subtitle: track.description || ''
+          };
+        }
       }
+      for (const track of depth1Nodes) {
+        if (getNodeStatus(track.id) === 'todo') {
+          return {
+            node: track,
+            parent: getNode('tech'),
+            depth: 1,
+            isLeaf: true,
+            tag: 'GLOBAL: SURVEY',
+            title: track.title,
+            subtitle: track.description || ''
+          };
+        }
+      }
+      return {
+        node: depth1Nodes[0],
+        parent: getNode('tech'),
+        depth: 1,
+        isLeaf: false,
+        allDone: true,
+        tag: 'DEPTH 1 DONE',
+        title: 'Macro Survey Done',
+        subtitle: 'Return to any track to expand Depth 2 sub-stations.'
+      };
     }
 
-    // 2. Depth 2 Applied Queue: Interleave child modules across parallel tracks
-    // Collect child modules per track
+    // Phase 2: Depth 2 leaf nodes round-robin across tracks
     const trackChildrenMap = {};
     let maxChildren = 0;
     PARALLEL_TRACKS.forEach(trackId => {
@@ -195,7 +248,6 @@
       maxChildren = Math.max(maxChildren, trackChildrenMap[trackId].length);
     });
 
-    // First check for any 'in-progress' Depth 2 node
     for (let i = 0; i < maxChildren; i++) {
       for (const trackId of PARALLEL_TRACKS) {
         const childNode = trackChildrenMap[trackId][i];
@@ -206,15 +258,15 @@
             node: childNode,
             parent: parentTrack,
             depth: 2,
-            tag: 'CYCLE 2: DEPTH 2 IN PROGRESS',
+            isLeaf: (!childNode.children || childNode.children.length === 0),
+            tag: 'GLOBAL: IN PROGRESS',
             title: `${parentTrack.title} → ${childNode.title}`,
-            subtitle: childNode.description || 'Applied engineering station currently in progress.'
+            subtitle: childNode.description || ''
           };
         }
       }
     }
 
-    // Interleave Depth 2 nodes round-robin across tracks (Track 0 M1, Track 1 M1, ...)
     for (let i = 0; i < maxChildren; i++) {
       for (const trackId of PARALLEL_TRACKS) {
         const childNode = trackChildrenMap[trackId][i];
@@ -225,37 +277,110 @@
             node: childNode,
             parent: parentTrack,
             depth: 2,
-            tag: 'CYCLE 2: DEPTH 2 APPLIED',
+            isLeaf: (!childNode.children || childNode.children.length === 0),
+            tag: 'GLOBAL: APPLIED',
             title: `${parentTrack.title} → ${childNode.title}`,
-            subtitle: childNode.description || 'Complete applied track module and save revision notes.'
+            subtitle: childNode.description || ''
           };
         }
       }
     }
 
-    // 3. Depth 3 Granular Queue (Check if deeper child nodes exist)
-    for (const trackId of PARALLEL_TRACKS) {
-      const modules = trackChildrenMap[trackId];
-      for (const mod of modules) {
-        if (mod.children && mod.children.length > 0) {
-          for (const subId of mod.children) {
-            const subNode = getNode(subId);
-            if (subNode && getNodeStatus(subNode.id) !== 'completed') {
-              return {
-                node: subNode,
-                parent: mod,
-                depth: 3,
-                tag: 'CYCLE 3: DEPTH 3 DEEP DIVE',
-                title: `${mod.title} → ${subNode.title}`,
-                subtitle: subNode.description || 'Specialized granular deep dive node.'
-              };
-            }
+    return null;
+  }
+
+  // Local Context Next Step (adapted to currently viewed branch/node)
+  function getLocalContextRecommendation() {
+    const currentId = historyStack[historyStack.length - 1];
+
+    // If at macro level, defer to global recommendation
+    if (currentId === 'root' || currentId === 'tech') {
+      return null;
+    }
+
+    const currentNode = getNode(currentId);
+    if (!currentNode) return null;
+
+    // Case A: Current node has children (viewing a branch hub)
+    if (currentNode.children && currentNode.children.length > 0) {
+      // Prioritize in-progress child
+      for (const cid of currentNode.children) {
+        const child = getNode(cid);
+        if (child && getNodeStatus(cid) === 'in-progress') {
+          return {
+            node: child,
+            parent: currentNode,
+            tag: 'LOCAL: IN PROGRESS',
+            title: child.title,
+            subtitle: `Active station in ${currentNode.title}`,
+            targetStack: [...historyStack, cid]
+          };
+        }
+      }
+      // First todo child
+      for (const cid of currentNode.children) {
+        const child = getNode(cid);
+        if (child && getNodeStatus(cid) === 'todo') {
+          return {
+            node: child,
+            parent: currentNode,
+            tag: 'LOCAL: NEXT IN BRANCH',
+            title: child.title,
+            subtitle: `Next station in ${currentNode.title}`,
+            targetStack: [...historyStack, cid]
+          };
+        }
+      }
+      // All children in branch completed
+      return {
+        node: currentNode,
+        allDone: true,
+        tag: 'BRANCH COMPLETE ✓',
+        title: `${currentNode.title} Mastered`,
+        subtitle: 'All child stations in this branch completed'
+      };
+    }
+
+    // Case B: Current node is a leaf node
+    const parentId = findParentNodeId(currentId);
+    if (parentId && parentId !== 'root') {
+      const parentNode = getNode(parentId);
+      if (parentNode && parentNode.children && parentNode.children.length > 0) {
+        const idx = parentNode.children.indexOf(currentId);
+        // Look for next uncompleted sibling
+        for (let i = idx + 1; i < parentNode.children.length; i++) {
+          const sibId = parentNode.children[i];
+          const sib = getNode(sibId);
+          if (sib && getNodeStatus(sibId) !== 'completed') {
+            const nextStack = historyStack.slice(0, -1);
+            nextStack.push(sibId);
+            return {
+              node: sib,
+              parent: parentNode,
+              tag: 'LOCAL: NEXT IN TRACK',
+              title: sib.title,
+              subtitle: `Next station in ${parentNode.title}`,
+              targetStack: nextStack
+            };
           }
         }
       }
     }
 
-    // All currently known nodes completed!
+    return null;
+  }
+
+  function getNextSiblingNode(nodeId) {
+    const parentId = findParentNodeId(nodeId);
+    if (!parentId) return null;
+    const parentNode = getNode(parentId);
+    if (!parentNode || !parentNode.children) return null;
+
+    const idx = parentNode.children.indexOf(nodeId);
+    if (idx >= 0 && idx < parentNode.children.length - 1) {
+      const nextId = parentNode.children[idx + 1];
+      return getNode(nextId);
+    }
     return null;
   }
 
@@ -265,31 +390,55 @@
     const subtitleEl = document.getElementById('next-up-subtitle');
     const btnJump = document.getElementById('btn-jump-next');
 
-    const next = getBFSRecommendation();
+    const currentId = historyStack[historyStack.length - 1];
+    const isMacroView = (currentId === 'root' || currentId === 'tech');
 
-    if (!next) {
+    // 1. Try local context first if inside a specific branch
+    const localRec = !isMacroView ? getLocalContextRecommendation() : null;
+    const globalRec = getGlobalBFSRecommendation();
+
+    if (localRec && !localRec.allDone) {
+      // Local context active
+      btnJump.style.display = 'inline-flex';
+      tagEl.textContent = localRec.tag;
+      tagEl.style.background = 'var(--accent-blue)';
+      titleEl.textContent = localRec.title;
+      subtitleEl.textContent = localRec.subtitle;
+      btnJump.textContent = '➔ Next Station';
+
+      btnJump.onclick = () => {
+        if (localRec.targetStack) {
+          historyStack = localRec.targetStack;
+        } else {
+          historyStack.push(localRec.node.id);
+        }
+        renderCurrentView();
+      };
+      return;
+    }
+
+    // 2. Global BFS queue fallback
+    if (!globalRec) {
       tagEl.textContent = 'MASTERED';
       tagEl.style.background = 'var(--accent-green-text)';
-      titleEl.textContent = 'All Parallel Tracks & Applied Modules Completed!';
-      subtitleEl.textContent = 'Ready for production fusion capstones or Depth 3 specialization expansion.';
+      titleEl.textContent = 'All Available Stations Completed!';
+      subtitleEl.textContent = '';
       btnJump.style.display = 'none';
       return;
     }
 
     btnJump.style.display = 'inline-flex';
-    tagEl.textContent = next.tag;
-    tagEl.style.background = next.depth === 1 ? 'var(--accent-blue)' : 'var(--accent-purple)';
-    titleEl.textContent = next.title;
-    subtitleEl.textContent = next.subtitle;
+    tagEl.textContent = globalRec.tag;
+    tagEl.style.background = globalRec.depth === 1 ? 'var(--accent-blue)' : 'var(--accent-purple)';
+    titleEl.textContent = globalRec.title;
+    subtitleEl.textContent = globalRec.subtitle;
+    btnJump.textContent = '➔ Jump to Station';
 
     btnJump.onclick = () => {
-      // Build appropriate breadcrumbs stack
-      if (next.depth === 1) {
-        historyStack = ['root', 'tech', next.node.id];
-      } else if (next.depth === 2) {
-        historyStack = ['root', 'tech', next.parent.id, next.node.id];
-      } else if (next.depth === 3) {
-        historyStack = ['root', 'tech', 'core-cs', next.parent.id, next.node.id];
+      if (globalRec.depth === 1) {
+        historyStack = ['root', 'tech', globalRec.node.id];
+      } else if (globalRec.depth === 2) {
+        historyStack = ['root', 'tech', globalRec.parent.id, globalRec.node.id];
       }
       renderCurrentView();
     };
@@ -306,7 +455,6 @@
     let total = 0;
     let completed = 0;
 
-    // Track progress across all known nodes in graph
     Object.keys(graphManifest).forEach(id => {
       if (id === 'root') return;
       total++;
@@ -316,23 +464,15 @@
     });
 
     if (total === 0) {
-      // Fallback count if graphManifest is empty
       PARALLEL_TRACKS.forEach(tid => {
         total++;
         if (getNodeStatus(tid) === 'completed') completed++;
-        const tnode = getNode(tid);
-        if (tnode && tnode.children) {
-          tnode.children.forEach(cid => {
-            total++;
-            if (getNodeStatus(cid) === 'completed') completed++;
-          });
-        }
       });
     }
 
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
     progressFill.style.width = percent + '%';
-    progressText.textContent = `${percent}% (${completed}/${total} Nodes Completed)`;
+    progressText.textContent = `${percent}% (${completed}/${total} Stations Completed)`;
   }
 
   // ---------------------------------------------------------------------------
@@ -416,13 +556,11 @@
     const status = getNodeStatus(currentId);
     badgesGroupEl.innerHTML = '';
 
-    // Depth Badge
     const depthBadge = document.createElement('span');
     depthBadge.className = 'badge-pill depth';
-    depthBadge.textContent = `Depth d=${currentNode.depth !== undefined ? currentNode.depth : (historyStack.length - 1)}`;
+    depthBadge.textContent = `d=${currentNode.depth !== undefined ? currentNode.depth : (historyStack.length - 1)}`;
     badgesGroupEl.appendChild(depthBadge);
 
-    // Track or Domain Badge
     if (currentNode.badge) {
       const badgePill = document.createElement('span');
       badgePill.className = 'badge-pill';
@@ -430,10 +568,9 @@
       badgesGroupEl.appendChild(badgePill);
     }
 
-    // Status Badge
     const statusBadge = document.createElement('span');
     statusBadge.className = `badge-pill status-${status}`;
-    const statusLabels = { 'todo': 'To Do', 'in-progress': 'In Progress', 'completed': 'Completed ✓' };
+    const statusLabels = { 'todo': 'To Do', 'in-progress': 'In Progress', 'completed': 'Done ✓' };
     statusBadge.textContent = statusLabels[status] || status;
     badgesGroupEl.appendChild(statusBadge);
 
@@ -445,7 +582,6 @@
       };
     }
 
-    // View mode toggle visible only on 'tech' domain
     if (currentId === 'tech') {
       viewToggleEl.style.display = 'flex';
       document.getElementById('btn-view-swimlanes').className = `btn-toggle ${viewMode === 'swimlanes' ? 'active' : ''}`;
@@ -456,7 +592,6 @@
 
     container.innerHTML = '';
 
-    // If at Tech Domain and Swimlanes mode: Render Parallel Macro Swimlanes
     if (currentId === 'tech' && viewMode === 'swimlanes') {
       roadsHeaderTitle.textContent = 'Parallel Track Swimlanes';
       roadsHeaderCount.textContent = '4 Tracks + Fusion';
@@ -464,7 +599,6 @@
       return;
     }
 
-    // Standard Recursive Child Road View
     renderChildRoads(currentNode, container);
   }
 
@@ -476,7 +610,6 @@
     const swimlanesDiv = document.createElement('div');
     swimlanesDiv.className = 'macro-swimlanes-container';
 
-    // 4 Parallel Track Columns Grid
     const gridDiv = document.createElement('div');
     gridDiv.className = 'parallel-tracks-grid';
 
@@ -504,7 +637,7 @@
 
       const statusEl = document.createElement('div');
       statusEl.className = 'track-lane-progress';
-      const statusText = trackStatus === 'completed' ? 'Track Survey Done ✓' : (trackStatus === 'in-progress' ? 'In Progress ⏳' : 'To Do');
+      const statusText = trackStatus === 'completed' ? 'Done ✓' : (trackStatus === 'in-progress' ? 'In Progress ⏳' : 'To Do');
       statusEl.textContent = statusText;
 
       headerDiv.appendChild(titleEl);
@@ -515,34 +648,43 @@
       modulesDiv.className = 'track-lane-modules';
 
       const childIds = trackNode.children || [];
-      childIds.forEach(cid => {
-        const childNode = getNode(cid);
-        if (!childNode) return;
+      if (childIds.length === 0) {
+        const emptyHint = document.createElement('div');
+        emptyHint.style.fontSize = '0.78rem';
+        emptyHint.style.color = 'var(--text-muted)';
+        emptyHint.style.padding = '8px 4px';
+        emptyHint.textContent = trackStatus === 'completed' ? '✓ Done (Ready to expand)' : '0 child stations';
+        modulesDiv.appendChild(emptyHint);
+      } else {
+        childIds.forEach(cid => {
+          const childNode = getNode(cid);
+          if (!childNode) return;
 
-        const cstatus = getNodeStatus(cid);
-        const pill = document.createElement('div');
-        pill.className = `module-pill status-${cstatus}`;
-        pill.title = childNode.description || '';
+          const cstatus = getNodeStatus(cid);
+          const pill = document.createElement('div');
+          pill.className = `module-pill status-${cstatus}`;
+          pill.title = childNode.description || '';
 
-        const mTitle = document.createElement('span');
-        mTitle.className = 'module-pill-title';
-        mTitle.textContent = childNode.title;
+          const mTitle = document.createElement('span');
+          mTitle.className = 'module-pill-title';
+          mTitle.textContent = childNode.title;
 
-        const mBadge = document.createElement('span');
-        mBadge.className = 'module-pill-badge';
-        mBadge.textContent = `${childNode.badge || ''} • ${cstatus.toUpperCase()}`;
+          const mBadge = document.createElement('span');
+          mBadge.className = 'module-pill-badge';
+          mBadge.textContent = `${childNode.badge || ''} • ${cstatus.toUpperCase()}`;
 
-        pill.appendChild(mTitle);
-        pill.appendChild(mBadge);
+          pill.appendChild(mTitle);
+          pill.appendChild(mBadge);
 
-        pill.onclick = () => {
-          historyStack.push(trackId);
-          historyStack.push(cid);
-          renderCurrentView();
-        };
+          pill.onclick = () => {
+            historyStack.push(trackId);
+            historyStack.push(cid);
+            renderCurrentView();
+          };
 
-        modulesDiv.appendChild(pill);
-      });
+          modulesDiv.appendChild(pill);
+        });
+      }
 
       laneDiv.appendChild(modulesDiv);
       gridDiv.appendChild(laneDiv);
@@ -550,7 +692,6 @@
 
     swimlanesDiv.appendChild(gridDiv);
 
-    // Milestone Fusion Banner spanning full width below
     const fusionNode = getNode('fusion');
     if (fusionNode) {
       const fusionDiv = document.createElement('div');
@@ -575,36 +716,6 @@
       fHeader.appendChild(fAction);
       fusionDiv.appendChild(fHeader);
 
-      const fGrid = document.createElement('div');
-      fGrid.className = 'fusion-modules-grid';
-
-      (fusionNode.children || []).forEach(fid => {
-        const fMod = getNode(fid);
-        if (!fMod) return;
-        const fStatus = getNodeStatus(fid);
-
-        const card = document.createElement('div');
-        card.className = `module-pill status-${fStatus}`;
-        card.onclick = () => {
-          historyStack.push('fusion');
-          historyStack.push(fid);
-          renderCurrentView();
-        };
-
-        const t = document.createElement('span');
-        t.className = 'module-pill-title';
-        t.textContent = fMod.title;
-
-        const b = document.createElement('span');
-        b.className = 'module-pill-badge';
-        b.textContent = `${fMod.badge || ''} • ${fStatus.toUpperCase()}`;
-
-        card.appendChild(t);
-        card.appendChild(b);
-        fGrid.appendChild(card);
-      });
-
-      fusionDiv.appendChild(fGrid);
       swimlanesDiv.appendChild(fusionDiv);
     }
 
@@ -612,47 +723,90 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 6B. Recursive Child Road View
+  // 6B. Recursive Child Road View & Leaf Node Learning Presentation
   // ---------------------------------------------------------------------------
 
   function renderChildRoads(currentNode, container) {
+    const currentId = historyStack[historyStack.length - 1];
     const roadsHeaderTitle = document.getElementById('child-roads-title');
     const roadsHeaderCount = document.getElementById('child-roads-count');
 
     const children = currentNode.children || [];
-    roadsHeaderTitle.textContent = 'Child Roads & Stations';
-    roadsHeaderCount.textContent = `${children.length} Stations`;
+    const currentStatus = getNodeStatus(currentId);
 
     if (children.length === 0) {
-      // Leaf Node Presentation
-      const leafDiv = document.createElement('div');
-      leafDiv.style.background = 'var(--bg-secondary)';
-      leafDiv.style.border = '1px dashed var(--border)';
-      leafDiv.style.borderRadius = '8px';
-      leafDiv.style.padding = '28px';
-      leafDiv.style.textAlign = 'center';
+      roadsHeaderTitle.textContent = 'Sub-stations';
+      roadsHeaderCount.textContent = '0';
 
-      leafDiv.innerHTML = `
-        <div style="font-size: 2rem; margin-bottom: 10px;">🌟</div>
-        <h3 style="margin-bottom: 6px;">Station Endpoint (Leaf Node)</h3>
-        <p style="color: var(--text-secondary); max-width: 540px; margin: 0 auto 16px auto; font-size: 0.9rem;">
-          You have reached an applied module. Dive into the rich notes via 
-          <strong style="color: var(--text-primary);">[ 📝 Node Summary & Notes ]</strong> 
-          above, or expand deeper Depth 3 sub-stations just-in-time as you master concepts.
-        </p>
-        <button class="btn-node-action btn-action-summary" id="btn-leaf-open-summary">
-          📝 Open summary.md Notes
-        </button>
-      `;
+      const leafDiv = document.createElement('div');
+      leafDiv.className = 'leaf-station-banner compact';
+
+      const nextSibling = getNextSiblingNode(currentId);
+      let nextBtnHtml = '';
+      if (nextSibling) {
+        nextBtnHtml = `
+          <button class="btn-node-action btn-action-next-sibling" id="btn-next-sibling">
+            ➔ Next: ${nextSibling.title}
+          </button>
+        `;
+      }
+
+      if (currentStatus === 'completed') {
+        leafDiv.innerHTML = `
+          <div class="leaf-compact-row">
+            <span class="leaf-status-indicator done">✓ Completed</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              ${nextBtnHtml}
+              <button class="btn-node-action btn-action-expand" id="btn-expand-children">
+                ➕ Expand Child Stations
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        leafDiv.innerHTML = `
+          <div class="leaf-compact-row">
+            <span class="leaf-status-indicator">Leaf Station</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button class="btn-node-action btn-action-summary" id="btn-leaf-open-summary">
+                📝 Notes
+              </button>
+              <button class="btn-node-action btn-action-complete" id="btn-leaf-mark-done">
+                ✓ Mark Done
+              </button>
+              ${nextBtnHtml}
+            </div>
+          </div>
+        `;
+      }
 
       container.appendChild(leafDiv);
 
-      const leafBtn = document.getElementById('btn-leaf-open-summary');
-      if (leafBtn) leafBtn.onclick = () => openSummaryModal(currentNode.id);
+      const leafSummaryBtn = document.getElementById('btn-leaf-open-summary');
+      if (leafSummaryBtn) leafSummaryBtn.onclick = () => openSummaryModal(currentId);
+
+      const leafDoneBtn = document.getElementById('btn-leaf-mark-done');
+      if (leafDoneBtn) leafDoneBtn.onclick = () => setNodeStatus(currentId, 'completed');
+
+      const expandBtn = document.getElementById('btn-expand-children');
+      if (expandBtn) expandBtn.onclick = () => expandNodeChildren(currentId);
+
+      const nextSibBtn = document.getElementById('btn-next-sibling');
+      if (nextSibBtn && nextSibling) {
+        nextSibBtn.onclick = () => {
+          const nextStack = historyStack.slice(0, -1);
+          nextStack.push(nextSibling.id);
+          historyStack = nextStack;
+          renderCurrentView();
+        };
+      }
       return;
     }
 
-    // Road Track Container
+    // Branch Hub Presentation: Has Children
+    roadsHeaderTitle.textContent = 'Child Stations';
+    roadsHeaderCount.textContent = `${children.length}`;
+
     const roadLine = document.createElement('div');
     roadLine.className = 'road-line';
 
@@ -660,24 +814,27 @@
     trackLine.className = 'road-track';
     roadLine.appendChild(trackLine);
 
+    // Identify first uncompleted child for contextual emphasis
+    let firstUncompletedFound = false;
+
     children.forEach((childId, index) => {
       const childNode = getNode(childId);
       if (!childNode) return;
 
       const childStatus = getNodeStatus(childId);
-      const stationEl = document.createElement('div');
-      stationEl.className = `station status-${childStatus}`;
+      const isNextInBranch = (!firstUncompletedFound && childStatus !== 'completed');
+      if (isNextInBranch) firstUncompletedFound = true;
 
-      // Node circle
+      const stationEl = document.createElement('div');
+      stationEl.className = `station status-${childStatus} ${isNextInBranch ? 'next-in-branch' : ''}`;
+
       const nodeEl = document.createElement('div');
       nodeEl.className = 'station-node';
       nodeEl.title = `Station ${index + 1}: ${childStatus.toUpperCase()}`;
 
-      // Card
       const cardEl = document.createElement('div');
       cardEl.className = 'station-card';
 
-      // Header
       const headerEl = document.createElement('div');
       headerEl.className = 'station-card-header';
 
@@ -688,9 +845,16 @@
       const badgesGroup = document.createElement('div');
       badgesGroup.className = 'station-badges-group';
 
+      if (isNextInBranch) {
+        const nextBadge = document.createElement('span');
+        nextBadge.className = 'station-badge priority';
+        nextBadge.textContent = '👉 Next';
+        badgesGroup.appendChild(nextBadge);
+      }
+
       if (childNode.badge) {
         const badgeSpan = document.createElement('span');
-        badgeSpan.className = 'station-badge priority';
+        badgeSpan.className = 'station-badge';
         badgeSpan.textContent = childNode.badge;
         badgesGroup.appendChild(badgeSpan);
       }
@@ -705,7 +869,6 @@
       headerEl.appendChild(badgesGroup);
       cardEl.appendChild(headerEl);
 
-      // Description
       if (childNode.description) {
         const descP = document.createElement('p');
         descP.className = 'station-desc';
@@ -713,23 +876,21 @@
         cardEl.appendChild(descP);
       }
 
-      // Footer
       const footerEl = document.createElement('div');
       footerEl.className = 'station-footer';
 
       const childCountSpan = document.createElement('span');
       const subCount = childNode.children ? childNode.children.length : 0;
-      childCountSpan.textContent = subCount > 0 ? `${subCount} Sub-stations` : 'Station Module';
+      childCountSpan.textContent = subCount > 0 ? `${subCount} Sub-stations` : 'Leaf Station';
 
       const actionSpan = document.createElement('span');
       actionSpan.className = 'station-action-hint';
-      actionSpan.textContent = 'Explore station ➔';
+      actionSpan.textContent = isNextInBranch ? 'Continue here ➔' : 'Explore station ➔';
 
       footerEl.appendChild(childCountSpan);
       footerEl.appendChild(actionSpan);
       cardEl.appendChild(footerEl);
 
-      // Click: Drill down into child view (Rule 5)
       cardEl.onclick = () => {
         historyStack.push(childId);
         renderCurrentView();
@@ -741,6 +902,44 @@
     });
 
     container.appendChild(roadLine);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 6C. Just-in-Time Child Expansion
+  // ---------------------------------------------------------------------------
+
+  async function expandNodeChildren(nodeId) {
+    if (!isServerConnected) {
+      alert('Local Python server must be running to expand folders on disk. Run run.bat first.');
+      return;
+    }
+
+    const relPath = getNodeRelPath(nodeId);
+
+    try {
+      const res = await fetch('/api/expand-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: relPath })
+      });
+
+      if (res.ok) {
+        const statuses = getSavedStatuses();
+        statuses[nodeId] = 'in-progress';
+        localStorage.setItem(STORAGE_STATUS_KEY, JSON.stringify(statuses));
+
+        await checkServerConnection();
+        renderCurrentView();
+        updateNextUpBanner();
+        updateOverallProgress();
+      } else {
+        const err = await res.json();
+        alert(`Expansion error: ${err.error || 'Failed to expand'}`);
+      }
+    } catch (e) {
+      console.error('Error expanding children:', e);
+      alert('Failed to connect to local server for expansion.');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -763,7 +962,6 @@
 
     let html = '';
 
-    // RelPath in graph
     const relPath = getNodeRelPath(nodeId);
     html += `
       <div>
@@ -774,7 +972,6 @@
       </div>
     `;
 
-    // Concept Section
     if (node.concept) {
       html += `
         <div>
@@ -784,7 +981,6 @@
       `;
     }
 
-    // Active Recall
     if (node.activeRecall) {
       html += `
         <div>
@@ -794,7 +990,6 @@
       `;
     }
 
-    // Curated Resources
     if (node.resources && node.resources.length > 0) {
       html += `
         <div>
@@ -860,7 +1055,6 @@
 
     saveStatusEl.textContent = 'Loading notes...';
 
-    // Fetch summary content from server or local cache
     let content = '';
     if (isServerConnected) {
       try {
@@ -883,10 +1077,7 @@
     textarea.value = content;
     saveStatusEl.textContent = isServerConnected ? 'Synced with disk' : 'Local cache mode';
 
-    // Render markdown view
     renderMarkdownContent(content, previewEl);
-
-    // Switch to Preview tab initially
     switchSummaryTab('preview');
 
     overlay.classList.add('open');
@@ -914,8 +1105,6 @@
       btnEdit.classList.remove('active');
       editorView.style.display = 'none';
       previewView.style.display = 'block';
-
-      // Update preview if textarea changed
       renderMarkdownContent(textarea.value, previewView);
     }
   }
@@ -927,13 +1116,11 @@
     } else if (window.marked && typeof window.marked === 'function') {
       html = window.marked(markdownText);
     } else {
-      // Basic fallback
       html = `<pre style="white-space: pre-wrap;">${markdownText}</pre>`;
     }
 
     targetEl.innerHTML = html;
 
-    // Trigger KaTeX math rendering if available
     if (window.renderMathInElement) {
       try {
         window.renderMathInElement(targetEl, {
@@ -962,12 +1149,10 @@
 
     saveStatusEl.textContent = 'Saving to disk...';
 
-    // 1. Update local cache
     const cache = getSavedNotesCache();
     cache[currentId] = content;
     localStorage.setItem(STORAGE_NOTES_CACHE, JSON.stringify(cache));
 
-    // 2. Save directly to disk via server.py if connected
     if (isServerConnected) {
       try {
         const res = await fetch('/api/save-summary', {
@@ -994,11 +1179,9 @@
       saveStatusEl.textContent = 'Saved to browser local storage ✓';
     }
 
-    // Refresh rendered preview
     renderMarkdownContent(content, previewEl);
   }
 
-  // Quick markdown insertion helpers
   function insertEditorFormatting(tool) {
     const textarea = document.getElementById('summary-textarea');
     const start = textarea.selectionStart;
@@ -1040,11 +1223,10 @@
       if (res.ok) {
         const data = await res.json();
         isServerConnected = true;
-        pill.textContent = '🟢 Local Server Active (Live Disk Saves)';
+        pill.textContent = '🟢 Server Connected';
         pill.className = 'server-badge connected';
         pill.title = `Serving ${data.count} nodes from D:\\Career Roadmap\\graph`;
 
-        // Populate graphManifest with nodes discovered on disk
         if (data.nodes) {
           graphManifest = data.nodes;
         }
@@ -1055,7 +1237,7 @@
     }
 
     isServerConnected = false;
-    pill.textContent = '🟡 Offline Mode (localStorage)';
+    pill.textContent = '🟡 Offline';
     pill.className = 'server-badge offline';
     pill.title = 'Run "run.bat" or "python server.py" for live disk synchronization.';
     return false;
@@ -1066,13 +1248,11 @@
   // ---------------------------------------------------------------------------
 
   function setupEventListeners() {
-    // Logo Click -> return to Tech domain
     document.getElementById('logo').onclick = () => {
       historyStack = ['root', 'tech'];
       renderCurrentView();
     };
 
-    // Header Actions: Open Info & Open Summary
     document.getElementById('btn-open-info').onclick = () => {
       const currentId = historyStack[historyStack.length - 1];
       openInfoDrawer(currentId);
@@ -1083,11 +1263,9 @@
       openSummaryModal(currentId);
     };
 
-    // Drawer close buttons
     document.getElementById('drawer-close').onclick = closeInfoDrawer;
     document.getElementById('drawer-overlay').onclick = closeInfoDrawer;
 
-    // Drawer Status toggle buttons
     ['todo', 'inprogress', 'completed'].forEach(stKey => {
       const val = stKey === 'inprogress' ? 'in-progress' : stKey;
       const btn = document.getElementById(`btn-status-${stKey}`);
@@ -1099,7 +1277,6 @@
       }
     });
 
-    // Summary Modal controls
     document.getElementById('btn-tab-preview').onclick = () => switchSummaryTab('preview');
     document.getElementById('btn-tab-edit').onclick = () => switchSummaryTab('edit');
     document.getElementById('btn-save-summary').onclick = saveSummaryToDisk;
@@ -1109,12 +1286,10 @@
       if (e.target.id === 'summary-modal-overlay') closeSummaryModal();
     };
 
-    // Editor toolbar
     document.querySelectorAll('.btn-tool').forEach(btn => {
       btn.onclick = () => insertEditorFormatting(btn.getAttribute('data-tool'));
     });
 
-    // Ctrl+S inside summary textarea or modal
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         const overlay = document.getElementById('summary-modal-overlay');
@@ -1125,7 +1300,6 @@
       }
     });
 
-    // View toggle buttons on Tech domain
     document.getElementById('btn-view-swimlanes').onclick = () => {
       viewMode = 'swimlanes';
       renderCurrentView();
@@ -1138,11 +1312,7 @@
 
   async function init() {
     setupEventListeners();
-
-    // Check server status & sync graph
     await checkServerConnection();
-
-    // Render initial view
     renderCurrentView();
     updateOverallProgress();
   }
