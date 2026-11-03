@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Career Knowledge Graph: Tri-T Systems Engineer</title>
+  <title>Knowledge Graph</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <link rel="stylesheet" href="libs/katex.min.css">
   <link rel="stylesheet" href="style.css">
@@ -14,7 +14,7 @@
   <header class="app-header">
     <div class="header-left">
       <button class="btn-nav-back" id="btn-back" title="Go up to parent node" style="display: none;">←</button>
-      <div class="logo-clean" id="logo" title="Return to Master Root Graph">
+      <div class="logo-clean" id="logo" title="Return to root node">
         <span class="logo-icon">⚡</span>
         <span class="logo-text">Knowledge Graph</span>
       </div>
@@ -27,9 +27,6 @@
         <div class="progress-pill-bar"><div class="progress-pill-fill" id="overall-progress-fill"></div></div>
         <span class="progress-pill-text" id="overall-progress-text">0%</span>
       </div>
-
-      <!-- Server Status Dot -->
-      <span class="server-status-dot" id="server-status-pill" title="Checking server status..."></span>
     </div>
   </header>
 
@@ -47,112 +44,100 @@
     </div>
   </main>
 
-  <!-- Side Drawer: Node Info & Details (All Editable Fields) -->
-  <div class="drawer-overlay" id="drawer-overlay"></div>
-  <aside class="drawer" id="drawer">
-    <div class="drawer-header">
-      <div class="drawer-title-group">
-        <span class="drawer-kicker" id="drawer-kicker">Station Information</span>
-        <h2 class="drawer-title" id="drawer-title">Station Details</h2>
+  <!-- Modal: Markdown Viewer & Editor (for both info.md and notes.md) -->
+  <div class="summary-modal-overlay" id="markdown-modal-overlay">
+    <div class="summary-modal" id="markdown-modal">
+      <div class="summary-modal-header">
+        <div class="summary-header-left">
+          <span class="summary-modal-icon" id="md-modal-icon">ℹ️</span>
+          <div>
+            <h2 class="summary-modal-title" id="md-modal-title">info.md</h2>
+            <span class="summary-modal-path" id="md-modal-path">graph/...</span>
+          </div>
+        </div>
+
+        <div class="summary-header-controls">
+          <!-- Toggle Document: Info vs Notes -->
+          <div class="doc-switch-tabs">
+            <button class="btn-doc-tab active" id="btn-doc-info" title="View & edit info.md">ℹ️ Info</button>
+            <button class="btn-doc-tab" id="btn-doc-notes" title="View & edit notes.md">📝 Notes</button>
+          </div>
+
+          <!-- Mode Tabs: Rendered vs Edit -->
+          <div class="summary-mode-tabs">
+            <button class="btn-tab active" id="btn-tab-preview">👁️ Rendered</button>
+            <button class="btn-tab" id="btn-tab-edit">✏️ Edit</button>
+          </div>
+
+          <button class="btn-save-disk" id="btn-save-markdown">💾 Save to Disk</button>
+          <button class="summary-modal-close" id="btn-close-markdown" title="Close window">&times;</button>
+        </div>
       </div>
-      <button class="drawer-close" id="drawer-close" title="Close drawer">&times;</button>
+
+      <div class="summary-modal-body">
+        <!-- Rendered Markdown View (Marked.js + KaTeX) -->
+        <div class="markdown-preview markdown-body" id="md-rendered-view"></div>
+
+        <!-- Markdown Source Code Editor -->
+        <div class="markdown-editor-pane" id="md-editor-view" style="display: none;">
+          <div class="editor-toolbar">
+            <button type="button" class="btn-tool" data-tool="bold" title="Bold">**B**</button>
+            <button type="button" class="btn-tool" data-tool="code" title="Code Block">`Code`</button>
+            <button type="button" class="btn-tool" data-tool="math" title="Math Formula">$Math$</button>
+            <button type="button" class="btn-tool" data-tool="list" title="Bullet List">• List</button>
+            <button type="button" class="btn-tool" data-tool="check" title="Task List">☑ Task</button>
+            <span class="editor-shortcut-hint">Ctrl+S to save</span>
+          </div>
+          <textarea class="summary-editor-textarea" id="md-textarea" spellcheck="false" placeholder="Write markdown content..."></textarea>
+        </div>
+      </div>
     </div>
+  </div>
 
-    <div class="drawer-body">
-      <form id="drawer-info-form">
-        <!-- Completion Status -->
-        <div class="form-group">
-          <div class="drawer-section-title">Completion Status</div>
-          <div class="status-buttons-group">
-            <button type="button" class="btn-status" id="btn-status-todo" data-status="todo">To Do</button>
-            <button type="button" class="btn-status" id="btn-status-inprogress" data-status="in-progress">In Progress</button>
-            <button type="button" class="btn-status" id="btn-status-completed" data-status="completed">Completed ✓</button>
-          </div>
+  <!-- Modal: Extra Files (Appears only if files exist or to upload) -->
+  <div class="modal-overlay" id="extra-files-modal-overlay">
+    <div class="modal-card modal-card-compact">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-kicker">Folder Files</span>
+          <h2 class="modal-title" id="extra-files-title">📁 Extra Files</h2>
+          <span class="modal-parent-context" id="extra-files-path">graph/...</span>
+        </div>
+        <button class="modal-close" id="btn-close-extra-files">&times;</button>
+      </div>
+
+      <div class="modal-form">
+        <div class="extra-files-list" id="extra-files-list"></div>
+
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+          <button type="button" class="btn-upload-file-resource" id="btn-upload-extra-file-card">
+            <span>➕</span> Upload File (Disk)
+          </button>
         </div>
 
-        <!-- Directory Location -->
-        <div class="form-group">
-          <label class="form-label">Directory Location</label>
-          <div id="drawer-info-path" style="font-family: var(--font-mono); font-size: 0.8rem; background: var(--bg-card); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-secondary);">
-            graph/...
-          </div>
+        <div class="modal-footer" style="margin-top: 12px; padding-top: 12px;">
+          <span class="modal-status" id="extra-files-status"></span>
+          <button type="button" class="btn-secondary" id="btn-done-extra-files">Close</button>
         </div>
-
-        <!-- Title -->
-        <div class="form-group">
-          <label class="form-label" for="drawer-info-title">Station Title <span class="required">*</span></label>
-          <input type="text" id="drawer-info-title" class="form-input" required autocomplete="off">
-        </div>
-
-        <!-- Badge -->
-        <div class="form-group">
-          <label class="form-label" for="drawer-info-badge">Badge / Category</label>
-          <input type="text" id="drawer-info-badge" class="form-input" placeholder="Module">
-        </div>
-
-        <!-- Description -->
-        <div class="form-group">
-          <label class="form-label" for="drawer-info-desc">Description</label>
-          <textarea id="drawer-info-desc" class="form-textarea" rows="3" placeholder="Station summary or objectives..."></textarea>
-        </div>
-
-        <!-- Core Mental Model (Concept) -->
-        <div class="form-group">
-          <label class="form-label" for="drawer-info-concept">Core Mental Model (Concept)</label>
-          <textarea id="drawer-info-concept" class="form-textarea" rows="3" placeholder="Key concept or architectural principle..."></textarea>
-        </div>
-
-        <!-- Active Recall Question -->
-        <div class="form-group">
-          <label class="form-label" for="drawer-info-recall">Active Recall Question</label>
-          <textarea id="drawer-info-recall" class="form-textarea" rows="2" placeholder="Self-test question to challenge recall..."></textarea>
-        </div>
-
-        <!-- Resources & Files in Folder -->
-        <div class="form-group">
-          <div class="form-section-header">
-            <label class="form-label mb-0" id="drawer-resources-title">Resources & Files in Folder</label>
-            <button type="button" class="btn-text-action" id="btn-trigger-upload">📁 Upload File</button>
-          </div>
-          <div id="drawer-files-list" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;"></div>
-        </div>
-
-        <!-- External Link Resources -->
-        <div class="form-group">
-          <div class="form-section-header">
-            <label class="form-label mb-0">External Links</label>
-            <button type="button" class="btn-text-action" id="btn-add-resource-link">➕ Add Link</button>
-          </div>
-          <div class="resources-edit-list" id="resources-edit-list"></div>
-        </div>
-
-        <!-- Drawer Footer / Save Action -->
-        <div class="drawer-edit-footer">
-          <span class="drawer-save-status" id="drawer-save-status">Ready</span>
-          <div class="drawer-edit-actions">
-            <button type="button" class="btn-secondary" id="btn-drawer-close-bottom">Close</button>
-            <button type="submit" class="btn-primary" id="btn-save-drawer-info">💾 Save Changes</button>
-          </div>
-        </div>
-      </form>
+      </div>
     </div>
-  </aside>
+  </div>
 
-  <!-- Modal: Add Child Station (Choose Name Only) -->
+  <!-- Modal: Add Child Node (Choose Name Only) -->
   <div class="modal-overlay" id="add-child-modal-overlay">
     <div class="modal-card modal-card-compact">
       <div class="modal-header">
         <div class="modal-title-group">
-          <h2 class="modal-title">➕ Add Child Station</h2>
-          <span class="modal-parent-context" id="add-child-parent-label">Under: Station</span>
+          <h2 class="modal-title">➕ Add Child Node</h2>
+          <span class="modal-parent-context" id="add-child-parent-label"></span>
         </div>
         <button class="modal-close" id="btn-close-add-child">&times;</button>
       </div>
 
       <form id="form-add-child" class="modal-form">
         <div class="form-group">
-          <label class="form-label" for="new-child-name">Station Name <span class="required">*</span></label>
-          <input type="text" id="new-child-name" class="form-input" placeholder="e.g. Distributed Caching" required autofocus autocomplete="off">
+          <label class="form-label" for="new-child-name">Node Name <span class="required">*</span></label>
+          <input type="text" id="new-child-name" class="form-input" placeholder="Enter node name..." required autofocus autocomplete="off">
         </div>
 
         <div class="modal-footer">
@@ -166,60 +151,8 @@
     </div>
   </div>
 
-  <!-- Hidden File Input for Resource Uploads directly into node folder -->
-  <input type="file" id="resource-file-input" style="display: none;" multiple>
-
-  <!-- Modal / Full Overlay: Rich Markdown Summary & Disk Editor -->
-  <div class="summary-modal-overlay" id="summary-modal-overlay">
-    <div class="summary-modal" id="summary-modal">
-      <div class="summary-modal-header">
-        <div class="summary-header-left">
-          <span class="summary-modal-icon">📝</span>
-          <div>
-            <h2 class="summary-modal-title" id="summary-modal-title">summary.md</h2>
-            <span class="summary-modal-path" id="summary-modal-path">graph/...</span>
-          </div>
-        </div>
-
-        <div class="summary-header-controls">
-          <div class="summary-mode-tabs">
-            <button class="btn-tab active" id="btn-tab-preview">👁️ Rendered Notes</button>
-            <button class="btn-tab" id="btn-tab-edit">✏️ Edit Markdown</button>
-          </div>
-          <button class="btn-save-disk" id="btn-save-summary">💾 Save to Disk</button>
-          <button class="summary-modal-close" id="btn-close-summary" title="Close notes">&times;</button>
-        </div>
-      </div>
-
-      <div class="summary-modal-body">
-        <!-- Rendered Markdown View (Marked.js + KaTeX) -->
-        <div class="markdown-preview markdown-body" id="summary-rendered-view"></div>
-
-        <!-- Markdown Source Code Editor -->
-        <div class="markdown-editor-pane" id="summary-editor-view" style="display: none;">
-          <div class="editor-toolbar">
-            <button type="button" class="btn-tool" data-tool="bold" title="Bold">**B**</button>
-            <button type="button" class="btn-tool" data-tool="code" title="Code Block">`Code`</button>
-            <button type="button" class="btn-tool" data-tool="math" title="Math Formula">$Math$</button>
-            <button type="button" class="btn-tool" data-tool="list" title="Bullet List">• List</button>
-            <button type="button" class="btn-tool" data-tool="check" title="Task List">☑ Task</button>
-            <span class="editor-shortcut-hint">Ctrl+S to save</span>
-          </div>
-          <textarea class="summary-editor-textarea" id="summary-textarea" spellcheck="false" placeholder="Write rich notes with Markdown, code blocks, and math formulas..."></textarea>
-        </div>
-      </div>
-
-      <div class="summary-modal-footer">
-        <div class="summary-footer-status">
-          <span class="status-dot green"></span>
-          <span id="summary-save-status">Ready</span>
-        </div>
-        <div class="summary-footer-actions">
-          <button class="btn-secondary" id="btn-summary-done">Close</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Hidden File Input for Extra File Uploads -->
+  <input type="file" id="extra-file-input" style="display: none;" multiple>
 
   <!-- Local / Vendored Libraries with CDN Fallbacks -->
   <script src="libs/marked.min.js"></script>

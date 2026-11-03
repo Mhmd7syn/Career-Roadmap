@@ -4,9 +4,9 @@
 
 ---
 
-## Active & Planned Domains
+## Domains
 
-1. **Tech Domain (`tech`):** The primary engine. Implements the **Tri-T Engineer** model across 4 parallel tracks:
+1. **Tech Domain (`tech`):** Implements the **Tri-T Engineer** model across parallel tracks:
    - **Track 0: Core CS Foundations** (Algorithms, Systems, Networking)
    - **Track 1: Software Engineering (SWE)** (APIs, DBs, Docker, System Design)
    - **Track 2: Data Ecosystem** (SQL Analytics, dbt Warehouses, Airflow, Spark)
@@ -21,4 +21,4 @@
 ## Navigation & Mechanics
 
 - **BFS Traversal:** Always survey the macro breadth across tracks at Depth $d=1$ before drilling down to Depth $d=2$ and beyond.
-- **Node Action Buttons:** Use the header buttons on every node to view metadata and live-edit `summary.md` notes.
+- **Station Documents:** Each station maintains `info.md` (overview and mental models) and `notes.md` (study notes and code).
