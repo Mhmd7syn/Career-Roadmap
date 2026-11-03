@@ -28,11 +28,6 @@
         <span class="progress-pill-text" id="overall-progress-text">0%</span>
       </div>
 
-      <!-- Quick Action: Create Child under current node -->
-      <button class="btn-header-action" id="btn-header-add-child" title="Create child station under current node">
-        ➕ Add Child
-      </button>
-
       <!-- Server Status Dot -->
       <span class="server-status-dot" id="server-status-pill" title="Checking server status..."></span>
     </div>
@@ -46,151 +41,125 @@
         <!-- Active Parent Node Center -->
         <div class="graph-parent-anchor" id="graph-parent-anchor"></div>
 
-        <!-- Immediate Child Nodes Cluster -->
+        <!-- Immediate Child Nodes Cluster with + Button as a child -->
         <div class="graph-children-anchor" id="graph-children-anchor"></div>
       </div>
     </div>
   </main>
 
-  <!-- Side Drawer: Node Info & Details -->
+  <!-- Side Drawer: Node Info & Details (All Editable Fields) -->
   <div class="drawer-overlay" id="drawer-overlay"></div>
   <aside class="drawer" id="drawer">
     <div class="drawer-header">
       <div class="drawer-title-group">
-        <span class="drawer-kicker" id="drawer-kicker">Station Inspection</span>
+        <span class="drawer-kicker" id="drawer-kicker">Station Information</span>
         <h2 class="drawer-title" id="drawer-title">Station Details</h2>
       </div>
-      <div class="drawer-header-controls">
-        <div class="drawer-mode-tabs">
-          <button class="btn-drawer-tab active" id="btn-drawer-tab-view" title="View details">👁️ View</button>
-          <button class="btn-drawer-tab" id="btn-drawer-tab-edit" title="Edit station info">✏️ Edit</button>
-        </div>
-        <button class="drawer-close" id="drawer-close" title="Close drawer">&times;</button>
-      </div>
+      <button class="drawer-close" id="drawer-close" title="Close drawer">&times;</button>
     </div>
 
-    <!-- Drawer View Pane -->
-    <div class="drawer-body" id="drawer-view-pane">
-      <div>
-        <div class="drawer-section-title">Completion Status</div>
-        <div class="status-buttons-group">
-          <button class="btn-status" id="btn-status-todo" data-status="todo">To Do</button>
-          <button class="btn-status" id="btn-status-inprogress" data-status="in-progress">In Progress</button>
-          <button class="btn-status" id="btn-status-completed" data-status="completed">Completed ✓</button>
-        </div>
-      </div>
-      <div id="drawer-body-content"></div>
-    </div>
-
-    <!-- Drawer Edit Pane -->
-    <div class="drawer-body" id="drawer-edit-pane" style="display: none;">
-      <form id="drawer-edit-form" class="drawer-edit-form">
+    <div class="drawer-body">
+      <form id="drawer-info-form">
+        <!-- Completion Status -->
         <div class="form-group">
-          <label class="form-label" for="drawer-edit-title">Station Title <span class="required">*</span></label>
-          <input type="text" id="drawer-edit-title" class="form-input" required autocomplete="off">
-        </div>
-
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label class="form-label" for="drawer-edit-badge">Badge / Category</label>
-            <input type="text" id="drawer-edit-badge" class="form-input" placeholder="Module">
-          </div>
-          <div class="form-group flex-1">
-            <label class="form-label" for="drawer-edit-status">Status</label>
-            <select id="drawer-edit-status" class="form-select">
-              <option value="todo">To Do</option>
-              <option value="in-progress">In Progress</option>
-              <option value="completed">Completed</option>
-            </select>
+          <div class="drawer-section-title">Completion Status</div>
+          <div class="status-buttons-group">
+            <button type="button" class="btn-status" id="btn-status-todo" data-status="todo">To Do</button>
+            <button type="button" class="btn-status" id="btn-status-inprogress" data-status="in-progress">In Progress</button>
+            <button type="button" class="btn-status" id="btn-status-completed" data-status="completed">Completed ✓</button>
           </div>
         </div>
 
+        <!-- Directory Location -->
         <div class="form-group">
-          <label class="form-label" for="drawer-edit-desc">Description</label>
-          <textarea id="drawer-edit-desc" class="form-textarea" rows="3" placeholder="Station summary or objectives..."></textarea>
+          <label class="form-label">Directory Location</label>
+          <div id="drawer-info-path" style="font-family: var(--font-mono); font-size: 0.8rem; background: var(--bg-card); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-secondary);">
+            graph/...
+          </div>
         </div>
 
+        <!-- Title -->
         <div class="form-group">
-          <label class="form-label" for="drawer-edit-concept">Core Mental Model (Concept)</label>
-          <textarea id="drawer-edit-concept" class="form-textarea" rows="3" placeholder="Key concept or architectural principle..."></textarea>
+          <label class="form-label" for="drawer-info-title">Station Title <span class="required">*</span></label>
+          <input type="text" id="drawer-info-title" class="form-input" required autocomplete="off">
         </div>
 
+        <!-- Badge -->
         <div class="form-group">
-          <label class="form-label" for="drawer-edit-recall">Active Recall Question</label>
-          <textarea id="drawer-edit-recall" class="form-textarea" rows="2" placeholder="Self-test question to challenge recall..."></textarea>
+          <label class="form-label" for="drawer-info-badge">Badge / Category</label>
+          <input type="text" id="drawer-info-badge" class="form-input" placeholder="Module">
         </div>
 
+        <!-- Description -->
+        <div class="form-group">
+          <label class="form-label" for="drawer-info-desc">Description</label>
+          <textarea id="drawer-info-desc" class="form-textarea" rows="3" placeholder="Station summary or objectives..."></textarea>
+        </div>
+
+        <!-- Core Mental Model (Concept) -->
+        <div class="form-group">
+          <label class="form-label" for="drawer-info-concept">Core Mental Model (Concept)</label>
+          <textarea id="drawer-info-concept" class="form-textarea" rows="3" placeholder="Key concept or architectural principle..."></textarea>
+        </div>
+
+        <!-- Active Recall Question -->
+        <div class="form-group">
+          <label class="form-label" for="drawer-info-recall">Active Recall Question</label>
+          <textarea id="drawer-info-recall" class="form-textarea" rows="2" placeholder="Self-test question to challenge recall..."></textarea>
+        </div>
+
+        <!-- Resources & Files in Folder -->
         <div class="form-group">
           <div class="form-section-header">
-            <label class="form-label mb-0">External Link Resources</label>
+            <label class="form-label mb-0" id="drawer-resources-title">Resources & Files in Folder</label>
+            <button type="button" class="btn-text-action" id="btn-trigger-upload">📁 Upload File</button>
+          </div>
+          <div id="drawer-files-list" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;"></div>
+        </div>
+
+        <!-- External Link Resources -->
+        <div class="form-group">
+          <div class="form-section-header">
+            <label class="form-label mb-0">External Links</label>
             <button type="button" class="btn-text-action" id="btn-add-resource-link">➕ Add Link</button>
           </div>
           <div class="resources-edit-list" id="resources-edit-list"></div>
         </div>
 
+        <!-- Drawer Footer / Save Action -->
         <div class="drawer-edit-footer">
-          <span class="drawer-save-status" id="drawer-save-status"></span>
+          <span class="drawer-save-status" id="drawer-save-status">Ready</span>
           <div class="drawer-edit-actions">
-            <button type="button" class="btn-secondary" id="btn-cancel-drawer-edit">Cancel</button>
-            <button type="submit" class="btn-primary" id="btn-save-drawer-edit">💾 Save Changes</button>
+            <button type="button" class="btn-secondary" id="btn-drawer-close-bottom">Close</button>
+            <button type="submit" class="btn-primary" id="btn-save-drawer-info">💾 Save Changes</button>
           </div>
         </div>
       </form>
     </div>
   </aside>
 
-  <!-- Modal / Full Overlay: Add Child Station -->
+  <!-- Modal: Add Child Station (Choose Name Only) -->
   <div class="modal-overlay" id="add-child-modal-overlay">
-    <div class="modal-card">
+    <div class="modal-card modal-card-compact">
       <div class="modal-header">
         <div class="modal-title-group">
-          <span class="modal-kicker">New Directory Station</span>
           <h2 class="modal-title">➕ Add Child Station</h2>
-          <span class="modal-parent-context" id="add-child-parent-label">Under: Parent Station</span>
+          <span class="modal-parent-context" id="add-child-parent-label">Under: Station</span>
         </div>
         <button class="modal-close" id="btn-close-add-child">&times;</button>
       </div>
 
       <form id="form-add-child" class="modal-form">
         <div class="form-group">
-          <label class="form-label" for="new-child-title">Station Title <span class="required">*</span></label>
-          <input type="text" id="new-child-title" class="form-input" placeholder="e.g. Distributed Caching & Redis" required autocomplete="off">
+          <label class="form-label" for="new-child-name">Station Name <span class="required">*</span></label>
+          <input type="text" id="new-child-name" class="form-input" placeholder="e.g. Distributed Caching" required autofocus autocomplete="off">
         </div>
-
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label class="form-label" for="new-child-id">Folder / Station ID <span class="required">*</span></label>
-            <input type="text" id="new-child-id" class="form-input font-mono" placeholder="distributed-caching" required autocomplete="off">
-            <span class="form-hint" id="new-child-path-preview">Path: graph/...</span>
-          </div>
-          <div class="form-group" style="width: 140px;">
-            <label class="form-label" for="new-child-badge">Badge</label>
-            <input type="text" id="new-child-badge" class="form-input" value="Module">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="new-child-desc">Description</label>
-          <textarea id="new-child-desc" class="form-textarea" rows="2" placeholder="Overview of topics and milestones covered..."></textarea>
-        </div>
-
-        <details class="form-details-collapsible">
-          <summary class="form-details-summary">Advanced: Mental Model & Active Recall</summary>
-          <div class="form-group mt-2">
-            <label class="form-label" for="new-child-concept">Core Mental Model (Concept)</label>
-            <textarea id="new-child-concept" class="form-textarea" rows="2" placeholder="Key invariant or mental model..."></textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="new-child-recall">Active Recall Question</label>
-            <textarea id="new-child-recall" class="form-textarea" rows="2" placeholder="Question to verify understanding..."></textarea>
-          </div>
-        </details>
 
         <div class="modal-footer">
           <span class="modal-status" id="add-child-status"></span>
           <div class="modal-footer-actions">
             <button type="button" class="btn-secondary" id="btn-cancel-add-child">Cancel</button>
-            <button type="submit" class="btn-primary" id="btn-submit-add-child">➕ Create Station</button>
+            <button type="submit" class="btn-primary" id="btn-submit-add-child">Create</button>
           </div>
         </div>
       </form>
