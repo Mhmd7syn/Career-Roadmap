@@ -1,0 +1,17 @@
+{
+  "id": "swe-sysdesign",
+  "title": "System Design Fundamentals",
+  "badge": "SWE-04",
+  "depth": 2,
+  "description": "Scalability, horizontal vs vertical scaling, load balancers, caching, and stateless services.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "System Design Primer",
+      "url": "https://github.com/donnemartin/system-design-primer"
+    }
+  ],
+  "concept": "System design transforms single-server scripts into fault-tolerant distributed applications.",
+  "activeRecall": "Describe the differences between cache-aside, write-through, and write-back caching strategies."
+}

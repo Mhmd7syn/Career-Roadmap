@@ -1,0 +1,25 @@
+{
+  "id": "fusion",
+  "title": "Milestone Fusion Projects",
+  "badge": "Integration",
+  "depth": 1,
+  "description": "Continuous cross-domain projects combining SWE + Data + AI at key milestones.",
+  "status": "todo",
+  "children": [
+    "fusion-01",
+    "fusion-02",
+    "fusion-03"
+  ],
+  "resources": [
+    {
+      "label": "FastAPI + Docker Template",
+      "url": "https://fastapi.tiangolo.com/deployment/docker/"
+    },
+    {
+      "label": "Celery Distributed Task Queue",
+      "url": "https://docs.celeryq.dev/"
+    }
+  ],
+  "concept": "True engineering mastery is demonstrated when backend APIs, automated data pipelines, and AI inference engines run seamlessly in a single unified production architecture.",
+  "activeRecall": "How do asynchronous message queues decouple heavy embedding/LLM tasks from customer-facing API latency?"
+}

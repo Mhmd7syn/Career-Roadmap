@@ -1,0 +1,30 @@
+{
+  "id": "swe",
+  "title": "Track 1: Software Engineering (SWE)",
+  "badge": "Track 1",
+  "depth": 1,
+  "description": "Production backend architecture, APIs, databases, containerization, and system design.",
+  "status": "todo",
+  "children": [
+    "swe-backend",
+    "swe-databases",
+    "swe-devops",
+    "swe-sysdesign"
+  ],
+  "resources": [
+    {
+      "label": "FastAPI Official Documentation",
+      "url": "https://fastapi.tiangolo.com/"
+    },
+    {
+      "label": "Use The Index, Luke!",
+      "url": "https://use-the-index-luke.com/"
+    },
+    {
+      "label": "System Design Primer",
+      "url": "https://github.com/donnemartin/system-design-primer"
+    }
+  ],
+  "concept": "Reliable software systems require strict contract design, resilient data persistence, deterministic container builds, and horizontal scale.",
+  "activeRecall": "Why are stateless backend services required for horizontal scaling behind a reverse-proxy load balancer?"
+}

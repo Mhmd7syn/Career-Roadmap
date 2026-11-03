@@ -1,0 +1,27 @@
+{
+  "id": "tech",
+  "title": "Tech Domain: The Tri-T Engineer",
+  "badge": "Active Domain",
+  "depth": 0,
+  "description": "4 Parallel Tracks running concurrently via the Spiral Model: Core CS, SWE, Data, and AI, synthesized through Milestone Fusion Projects.",
+  "status": "in-progress",
+  "children": [
+    "core-cs",
+    "swe",
+    "data",
+    "ai",
+    "fusion"
+  ],
+  "resources": [
+    {
+      "label": "Build Plan",
+      "url": "docs/BUILD_PLAN.md"
+    },
+    {
+      "label": "Target Architecture",
+      "url": "docs/TARGET_ARCHITECTURE.md"
+    }
+  ],
+  "concept": "The Tri-T engineer possesses simultaneous deep competencies in SWE, Data, and AI, unified by computer science fundamentals.",
+  "activeRecall": "Why is balanced breadth across SWE, Data, and AI superior to single-silo specialization in modern systems?"
+}

@@ -1,0 +1,30 @@
+{
+  "id": "core-cs",
+  "title": "Track 0: Core CS Foundations",
+  "badge": "Track 0",
+  "depth": 1,
+  "description": "Algorithms, operating systems, networking protocols, and professional software craftsmanship.",
+  "status": "todo",
+  "children": [
+    "algo-ds",
+    "systems-os",
+    "networking",
+    "craftsmanship"
+  ],
+  "resources": [
+    {
+      "label": "NeetCode 150 Roadmap",
+      "url": "https://neetcode.io/roadmap"
+    },
+    {
+      "label": "Operating Systems: Three Easy Pieces (OSTEP)",
+      "url": "https://pages.cs.wisc.edu/~remzi/OSTEP/"
+    },
+    {
+      "label": "High Performance Browser Networking",
+      "url": "https://hpbn.co/"
+    }
+  ],
+  "concept": "Hardware architecture, memory hierarchies, OS primitives, and network protocols dictate the upper performance bound of every software, data, or AI system.",
+  "activeRecall": "How does cache-friendly sequential memory layout outperform pointer-chasing in high-throughput workloads?"
+}

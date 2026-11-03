@@ -1,0 +1,17 @@
+{
+  "id": "data-warehousing",
+  "title": "Data Warehousing & dbt Transformations",
+  "badge": "DATA-02",
+  "depth": 2,
+  "description": "Dimensional modeling (Kimball Star/Snowflake), dbt (data build tool), and Snowflake/BigQuery.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "dbt Fundamentals Course",
+      "url": "https://courses.getdbt.com/"
+    }
+  ],
+  "concept": "Modern data warehousing separates storage from compute, using dbt to apply software engineering practices to SQL.",
+  "activeRecall": "What is a Slowly Changing Dimension (SCD Type 2), and how does dbt handle snapshotting?"
+}

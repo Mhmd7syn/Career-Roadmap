@@ -1,0 +1,17 @@
+{
+  "id": "data-bigdata",
+  "title": "Distributed Compute & Event Streaming",
+  "badge": "DATA-04",
+  "depth": 2,
+  "description": "Apache Spark / PySpark, cluster partitions, and Apache Kafka / Redpanda event streaming.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "Spark Documentation",
+      "url": "https://spark.apache.org/docs/latest/"
+    }
+  ],
+  "concept": "When data exceeds single-machine RAM, distributed compute and event streams provide horizontal data scalability.",
+  "activeRecall": "How do Kafka partitions determine concurrency and ordering guarantees for consumers in a group?"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "swe-devops",
+  "title": "Containerization & Environments",
+  "badge": "SWE-03",
+  "depth": 2,
+  "description": "Docker, multi-stage builds, Docker Compose, environment management, and cloud primitives.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "Docker Official Guide",
+      "url": "https://docs.docker.com/get-started/"
+    }
+  ],
+  "concept": "Containers guarantee reproducibility across development, staging, and cloud production environments.",
+  "activeRecall": "How do Docker layers work with caching during docker build, and how should you order commands?"
+}

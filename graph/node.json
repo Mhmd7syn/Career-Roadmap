@@ -1,0 +1,25 @@
+{
+  "id": "root",
+  "title": "Career & Life Master Graph",
+  "badge": "Master Graph",
+  "depth": 0,
+  "description": "Lifelong growth network spanning engineering, career development, and consulting.",
+  "status": "in-progress",
+  "children": [
+    "tech",
+    "freelancing",
+    "marketing"
+  ],
+  "resources": [
+    {
+      "label": "Build Plan",
+      "url": "docs/BUILD_PLAN.md"
+    },
+    {
+      "label": "Target Architecture",
+      "url": "docs/TARGET_ARCHITECTURE.md"
+    }
+  ],
+  "concept": "Lifelong mastery is organized as a persistent knowledge graph where domains, tracks, and sub-stations expand organically.",
+  "activeRecall": "How does a directory-as-graph architecture guarantee full ownership, portability, and zero vendor lock-in?"
+}

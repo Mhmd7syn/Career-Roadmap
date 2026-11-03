@@ -1,0 +1,17 @@
+{
+  "id": "fusion-03",
+  "title": "Milestone 3: Real-Time AI Streaming System",
+  "badge": "Milestone 3",
+  "depth": 2,
+  "description": "gRPC/WebSocket backend + Kafka event streaming + vLLM serving + Langfuse observability.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "Kafka Streaming Reference",
+      "url": "https://kafka.apache.org/documentation/"
+    }
+  ],
+  "concept": "The capstone portfolio project qualifying you as a high-tier Tri-T Software & AI Systems Engineer.",
+  "activeRecall": "How does backpressure prevent downstream model inference servers from crashing during traffic spikes?"
+}

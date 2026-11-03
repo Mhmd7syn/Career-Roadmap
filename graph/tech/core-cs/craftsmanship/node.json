@@ -1,0 +1,17 @@
+{
+  "id": "craftsmanship",
+  "title": "Software Craftsmanship & Tooling",
+  "badge": "Module 04",
+  "depth": 2,
+  "description": "Advanced Git workflows, Clean Code, SOLID principles, testing, and debugging.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "Pro Git Book (Official)",
+      "url": "https://git-scm.com/book/en/v2"
+    }
+  ],
+  "concept": "High craftsmanship turns raw code into readable, maintainable, team-ready engineering assets.",
+  "activeRecall": "When is git rebase preferred over git merge, and why should you never rebase public shared branches?"
+}

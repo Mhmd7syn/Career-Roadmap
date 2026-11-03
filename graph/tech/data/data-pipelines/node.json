@@ -1,0 +1,17 @@
+{
+  "id": "data-pipelines",
+  "title": "Pipeline Orchestration & ETL/ELT",
+  "badge": "DATA-03",
+  "depth": 2,
+  "description": "Apache Airflow, Prefect, DAG scheduling, idempotent task design, and data contracts.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "Apache Airflow Core Concepts",
+      "url": "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/"
+    }
+  ],
+  "concept": "Data pipelines must be idempotent: running the same pipeline twice on the same day must produce the same result without duplicate data.",
+  "activeRecall": "Why is idempotency critical in batch ETL pipelines, and how do backfills handle historical reprocessing?"
+}

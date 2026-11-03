@@ -1,0 +1,17 @@
+{
+  "id": "swe-backend",
+  "title": "Backend Frameworks & API Design",
+  "badge": "SWE-01",
+  "depth": 2,
+  "description": "RESTful API standards, FastAPI / Go, async I/O event loops, and OAuth2 security.",
+  "status": "todo",
+  "children": [],
+  "resources": [
+    {
+      "label": "FastAPI Official Documentation",
+      "url": "https://fastapi.tiangolo.com/"
+    }
+  ],
+  "concept": "APIs are the contract between clients and services; robust design requires strict input validation and clean error handling.",
+  "activeRecall": "What is the performance difference between CPU-bound tasks and I/O-bound tasks in async web frameworks?"
+}
