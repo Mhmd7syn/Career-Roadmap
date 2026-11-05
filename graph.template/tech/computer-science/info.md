@@ -2,15 +2,15 @@
 
 **Status:** in-progress
 
-Core computing discipline structured into four essential disciplines: Foundations, AI, Data, and SWE.
+High-level entry point into computing science: maps the computational landscape, core paradigms, and taxonomy across Foundations, AI, Data, and SWE.
 
 ## Learning Outcomes
-- Master computing fundamentals across algorithms, data structures, operating systems, and networking protocols.
-- Architect and train modern machine learning, deep learning, NLP, and generative AI systems.
-- Build production analytical data pipelines, star-schema warehouses, and stream processing systems.
-- Engineer high-availability backend web APIs, scalable database layers, and containerized microservices.
+- Grasp the core taxonomy of computing (Foundations, AI, Data, SWE) and how they interconnect in real-world systems.
+- Understand fundamental computational paradigms (imperative, functional, object-oriented) and algorithmic problem-solving.
+- Establish a clean local coding environment and interactive REPL setup for rapid experimentation.
+- Recognize trade-offs between algorithmic complexity, system maintainability, and resource utilization.
 
 ## Links & Resources
-- [CS50: Introduction to Computer Science](https://cs50.harvard.edu/)
-- [MIT OpenCourseWare EECS](https://ocw.mit.edu/departments/electrical-engineering-and-computer-science/)
-- [Open Source Society University (OSSU) Computer Science](https://github.com/ossu/computer-science)
+- [CS50 Interactive Concepts & Practice Labs](https://cs50.harvard.edu/x/)
+- [Exercism Interactive Programming Tracks & Mentored Exercises](https://exercism.org/)
+- [Big-O Algorithm Complexity Visual Cheatsheet & Quizzes](https://www.bigocheatsheet.com/)

@@ -2,15 +2,15 @@
 
 **Status:** in-progress
 
-Core technology pillar organized around foundational computing and applied engineering systems.
+High-level orientation for technical engineering, standard tooling, and navigating between theoretical computer science and applied automation systems.
 
 ## Learning Outcomes
-- Master computer science foundations and production engineering systems.
-- Build resilient automation workflows, scripting tools, and autonomous task pipelines.
-- Integrate backend systems, distributed data architectures, and AI inference models.
-- Maintain systematic recall through focused implementation notes and production blueprints.
+- Form an intuitive mental model of the modern tech stack from low-level computing through application runtimes.
+- Configure a standardized terminal, Git workflow, shell scripting environment, and package managers.
+- Differentiate between theoretical computing foundations and practical automation tooling.
+- Trace baseline data flow and component boundaries across client, server, and storage layers.
 
 ## Links & Resources
-- [Teach Yourself Computer Science](https://teachyourselfcs.com/)
-- [The Architecture of Open Source Applications](https://aosabook.org/)
-- [High Scalability System Architectures](http://highscalability.com/)
+- [The Missing Semester of Your CS Education (Concise MIT Modules & Exercises)](https://missing.csail.mit.edu/)
+- [Learn Git Branching (Interactive Sandbox & Visual Puzzles)](https://learngitbranching.js.org/)
+- [Devhints Cheatsheets for Developers](https://devhints.io/)

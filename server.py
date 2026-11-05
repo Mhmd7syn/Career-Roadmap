@@ -461,7 +461,17 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             child_dir.mkdir(parents=True, exist_ok=True)
 
             # 1. info.md
-            info_content = f"# {name}\n\n**Status:** todo\n\n## Learning Outcomes\n\n\n## Links & Resources\n\n"
+            info_content = (
+                f"# {name}\n\n"
+                f"**Status:** todo\n\n"
+                f"Starter orientation and core mental models for {name}.\n\n"
+                f"## Learning Outcomes\n"
+                f"- \n\n"
+                f"## Checkpoint\n"
+                f"- [ ] \n\n"
+                f"## Links & Resources\n"
+                f"- \n"
+            )
             with open(child_dir / "info.md", "w", encoding="utf-8") as f:
                 f.write(info_content)
 

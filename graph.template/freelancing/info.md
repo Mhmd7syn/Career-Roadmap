@@ -2,16 +2,15 @@
 
 **Status:** todo
 
-Commercialization and high-value consulting operations: client acquisition, project scoping, contract negotiation, value-based pricing, and client delivery.
+Foundations of technical consulting: positioning skills as commercial solutions, drafting clear scope boundaries, and establishing professional client agreements.
 
 ## Learning Outcomes
-- Position technical capabilities as high-ROI business solutions rather than commoditized developer hours.
-- Draft clear Statements of Work (SOW), deliverables, milestones, and payment schedules.
-- Structure value-based pricing and fixed-scope estimation over hourly billing.
-- Build systematic client discovery pipelines, outreach strategies, and objection handling.
-- Manage client communication, scope changes, delivery handoffs, and ongoing retainer contracts.
+- Transition mindset from hourly worker to an independent technical problem solver.
+- Draft a concise 1-page Statement of Work (SOW) defining clear deliverables and payment milestones.
+- Calculate an accurate baseline hourly and project floor rate factoring in taxes, tools, and downtime.
+- Identify initial client acquisition pathways through warm professional networks and past colleague referrals.
 
 ## Links & Resources
-- [Value-Based Pricing (Alan Weiss)](https://alanweiss.com/)
-- [Hacker News Freelancing Guides](https://news.ycombinator.com/)
-- [Contract & SOW Templates for Engineers](https://github.com/)
+- [Bonsai Freelance Rate Calculator & Financial Benchmark Tool](https://www.hellobonsai.com/freelance-rate-calculator)
+- [Docracy Open-Source 1-Page Consulting Contract & SOW](https://www.docracy.com/)
+- [Double Your Freelancing: Value Proposition Quickstart Guide](https://doubleyourfreelancing.com/)

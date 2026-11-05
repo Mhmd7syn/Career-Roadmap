@@ -2,16 +2,15 @@
 
 **Status:** in-progress
 
-Commercial strategy, venture architecture, business models, financial mechanics, and go-to-market operations.
+High-level orientation for commercial literacy: value creation mechanics, primary business models, and the interconnected triad of entrepreneurship, marketing, and sales.
 
 ## Learning Outcomes
-- Understand core business models (SaaS, marketplace, agency, productized services, e-commerce).
-- Build and validate high-growth ventures from customer discovery through product-market fit.
-- Execute cohesive go-to-market strategies integrating inbound marketing and consultative sales.
-- Analyze unit economics, customer lifetime value (LTV), customer acquisition cost (CAC), and cash flow.
-- Build operational workflows, legal structures, and scalable business systems.
+- Form an intuitive mental model of how commercial businesses create, deliver, and capture financial value.
+- Identify the core mechanics of common business models (SaaS, consulting/agency, marketplace, transaction fees).
+- Grasp baseline financial terminology (revenue, expenses, gross margin, cash runway, break-even).
+- Map how customer discovery (entrepreneurship), demand generation (marketing), and closing (sales) reinforce each other.
 
 ## Links & Resources
-- [The Personal MBA (Josh Kaufman)](https://personalmba.com/)
-- [Y Combinator Startup Library](https://www.ycombinator.com/library)
-- [Harvard Business Review: Strategy & Business Models](https://hbr.org/)
+- [The Personal MBA: Core Business Concept Summaries](https://personalmba.com/)
+- [Y Combinator Startup School: Bite-Sized Modules & Founder Forum](https://www.startupschool.org/)
+- [Corporate Finance Institute: Free Financial & Business Model Fundamentals](https://corporatefinanceinstitute.com/resources/knowledge/)

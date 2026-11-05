@@ -2,17 +2,15 @@
 
 **Status:** todo
 
-Data engineering covering advanced analytical SQL, dimensional modeling, cloud data warehouses, automated pipeline orchestration, and distributed streaming.
+Foundational introduction to data engineering: relational queries, tabular representations, file formats, and the transition from transactional to analytical data.
 
 ## Learning Outcomes
-- Write advanced analytical SQL queries utilizing window functions, recursive CTEs, and query plan profiling (`EXPLAIN ANALYZE`).
-- Design scalable analytical schemas using Kimball dimensional modeling (star schemas, snowflake schemas, slowly changing dimensions).
-- Build modular transformation DAGs, automated data tests, and documentation with dbt.
-- Construct idempotent data pipelines and scheduled workflows using Apache Airflow or Dagster.
-- Understand distributed data processing engines (Apache Spark) and real-time streaming architectures (Apache Kafka).
+- Understand the core architectural distinction between transactional databases (OLTP) and analytical warehouses (OLAP).
+- Write standard SQL queries applying filters, table joins, group-by aggregations, and sorting.
+- Recognize primary data formats (CSV, JSON, Parquet) and fundamental tabular schema constraints.
+- Set up a lightweight local data exploration tool (DuckDB or SQLite) to query and validate datasets.
 
 ## Links & Resources
-- [Mode Analytics Advanced SQL Tutorial](https://mode.com/sql-tutorial/)
-- [dbt Fundamentals Course](https://courses.getdbt.com/)
-- [Apache Airflow Official Documentation](https://airflow.apache.org/docs/apache-airflow/stable/)
-- [Designing Data-Intensive Applications](https://dataintensive.net/)
+- [SQLBolt: Interactive Lessons & In-Browser Practice Queries](https://sqlbolt.com/)
+- [Select Star SQL: Interactive Real-World Data Exercises](https://selectstarsql.com/)
+- [DuckDB Quickstart: Fast Local Analytical SQL Drills](https://duckdb.org/docs/guides/sql_introduction/introduction.html)

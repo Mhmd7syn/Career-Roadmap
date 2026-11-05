@@ -2,17 +2,15 @@
 
 **Status:** todo
 
-Venture creation, idea validation, minimum viable products (MVPs), product-market fit, and startup execution.
+Foundational introduction to venture creation: customer pain point identification, testable value propositions, and lean validation cycles.
 
 ## Learning Outcomes
-- Identify high-leverage market problems and conduct customer discovery interviews.
-- Rapidly prototype, validate, and launch lean MVPs to test willingness to pay.
-- Achieve and measure product-market fit through retention cohorts and user feedback loops.
-- Understand startup financing mechanisms (bootstrapping, SAFE notes, venture capital, dilution).
-- Manage early-stage team formation, culture, and high-velocity execution cadence.
+- Structure an initial business idea into a testable problem-solution hypothesis.
+- Differentiate between urgent, painful customer problems and non-essential features.
+- Define a minimal viable offer (MVO) or landing test to validate buyer interest before building.
+- Draft non-leading customer discovery questions to gather objective feedback from target users.
 
 ## Links & Resources
-- [Y Combinator Startup School](https://www.startupschool.org/)
-- [The Lean Startup (Eric Ries)](http://theleanstartup.com/)
-- [Paul Graham Essays](https://paulgraham.com/articles.html)
-- [Zero to One (Peter Thiel)](https://www.goodreads.com/book/show/18050143-zero-to-one)
+- [The Mom Test: Concise Interview Rules & Bad Question Traps](https://robfitz.com/)
+- [Strategyzer: Value Proposition Canvas Template & Walkthrough](https://www.strategyzer.com/library/the-value-proposition-canvas)
+- [Y Combinator: How to Talk to Users (Short Video & Transcript)](https://www.ycombinator.com/library/6g-how-to-talk-to-users)

@@ -2,18 +2,15 @@
 
 **Status:** todo
 
-Artificial intelligence engineering spanning statistical machine learning, deep neural networks, computer vision, natural language processing, modern generative AI / LLMs, and MLOps.
+Foundational introduction to artificial intelligence: core taxonomy, mathematical intuitions, tensor operations, and basic model training loops.
 
 ## Learning Outcomes
-- Train and evaluate classical machine learning models (regression, classification, clustering, gradient boosted trees) with Scikit-Learn.
-- Build and train deep neural networks and attention mechanisms using PyTorch and Hugging Face Transformers.
-- Architect Retrieval-Augmented Generation (RAG) pipelines using vector databases (pgvector, Chroma, Qdrant) and hybrid semantic search.
-- Implement model evaluation, prompt optimization, quantization (bitsandbytes, AWQ), and low-latency serving (vLLM).
-- Deploy production MLOps workflows with automated experiment tracking (MLflow, Langfuse) and Dockerized inference endpoints.
+- Understand the taxonomy and boundaries separating classical machine learning, deep learning, and generative AI.
+- Grasp core mental models of model learning: weights, loss functions, backpropagation, and data splits.
+- Set up a clean Python AI development environment with PyTorch, NumPy, and Hugging Face libraries.
+- Run, train, and evaluate a baseline model on standard benchmark datasets using common accuracy metrics.
 
 ## Links & Resources
-- [Scikit-Learn Machine Learning Guide](https://scikit-learn.org/stable/user_guide.html)
-- [PyTorch Official Tutorials](https://pytorch.org/tutorials/)
-- [The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/)
-- [DeepLearning.AI Short Courses](https://www.deeplearning.ai/short-courses/)
-- [Hugging Face NLP Course](https://huggingface.co/learn/nlp-course/)
+- [Google Machine Learning Crash Course (Interactive Modules & Quizzes)](https://developers.google.com/machine-learning/crash-course)
+- [DeepLearning.AI Short Practice Courses & Notebooks](https://www.deeplearning.ai/short-courses/)
+- [The Illustrated Machine Learning & Deep Learning Visual Guides](https://jalammar.github.io/)

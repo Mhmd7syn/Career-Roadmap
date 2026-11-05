@@ -2,16 +2,15 @@
 
 **Status:** todo
 
-Computer science fundamentals covering asymptotic algorithm complexity, data structures, memory hierarchies, OS concurrency, and networking protocols.
+Core computational fundamentals: time/space complexity analysis, elementary data structures, memory layout, and baseline problem-solving patterns.
 
 ## Learning Outcomes
-- Analyze algorithmic time and space complexity using asymptotic notation (Big-O, Big-$\Omega$, Big-$\Theta$).
-- Implement and optimize fundamental data structures: arrays, hash maps, binary search trees, heaps, and graphs.
-- Master OS primitives: virtual memory paging, process scheduling, multithreading, mutexes/semaphores, and POSIX system calls.
-- Understand the 4-layer network stack: TCP/IP handshake overhead, TLS 1.3 encryption, HTTP/2 multiplexing, and HTTP/3 QUIC.
+- Calculate basic time and space complexity using Big-O notation on iterative and recursive functions.
+- Implement and operate foundational data structures (arrays, linked lists, stacks, queues, hash maps).
+- Understand memory organization fundamentals (stack vs. heap allocations, pointers/references, cache lines).
+- Apply essential algorithm patterns (two pointers, sliding window, binary search) on introductory practice problems.
 
 ## Links & Resources
-- [NeetCode 150 Algorithms Roadmap](https://neetcode.io/roadmap)
-- [Operating Systems: Three Easy Pieces (OSTEP)](https://pages.cs.wisc.edu/~remzi/OSTEP/)
-- [High Performance Browser Networking](https://hpbn.co/)
-- [Visualgo: Visualising Data Structures and Algorithms](https://visualgo.net/)
+- [Visualgo: Interactive Data Structure Visualizations & Quizzes](https://visualgo.net/)
+- [NeetCode: Guided Algorithm Practice Problems & Video Walkthroughs](https://neetcode.io/practice)
+- [BaseCS: Short Illustrated CS Concepts & Beginner Drills](https://medium.com/basecs)

@@ -2,15 +2,15 @@
 
 **Status:** todo
 
-Spiritual foundations, sacred texts, theology, moral philosophy, personal character development, and ethical living.
+Foundations of spiritual grounding, moral philosophy, and personal character: establishing ethical baselines and aligning daily ambition with enduring principles.
 
 ## Learning Outcomes
-- Deepen understanding of foundational religious doctrines, sacred scriptures, and theological principles.
-- Cultivate daily spiritual disciplines, contemplative practice, prayer, and mindful living.
-- Align professional ethics, commercial decisions, and personal conduct with moral integrity.
-- Build internal resilience, humility, purpose, and balance in navigating life and career challenges.
+- Establish a consistent daily rhythm of contemplation, mindful grounding, and ethical reflection.
+- Define explicit personal boundaries for professional integrity, honesty, and commercial dealings.
+- Cultivate humility and emotional resilience when managing career setbacks, ambiguity, or conflict.
+- Connect technical and commercial aspirations to a broader sense of purposeful service.
 
 ## Links & Resources
-- [Stanford Encyclopedia of Philosophy: Philosophy of Religion](https://plato.stanford.edu/entries/philosophy-religion/)
-- [Internet Sacred Text Archive](https://www.sacred-texts.com/)
-- [Encyclopedia Britannica: World Religions](https://www.britannica.com/topic/religion)
+- [Virtue Ethics Fundamentals & Self-Reflection Exercises](https://plato.stanford.edu/entries/ethics-virtue/)
+- [CrashCourse Philosophy: Ethics, Morality & Character (Short Video Modules & Quizzes)](https://thecrashcourse.com/)
+- [Daily Reflection & Mental Grounding Framework](https://dailystoic.com/what-is-stoicism-a-definition-3-stoic-exercises-to-get-you-started/)

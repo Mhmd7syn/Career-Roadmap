@@ -2,16 +2,15 @@
 
 **Status:** in-progress
 
-Central knowledge graph and lifelong learning roadmap spanning Technology, Business, Freelancing, Teaching & Mentoring, and Religion.
+Foundational launchpad and navigation root across the five core life domains: Technology, Business, Freelancing, Teaching & Mentoring, and Religion.
 
 ## Learning Outcomes
-- Master computer science principles (Foundations, AI, Data, SWE) and applied engineering automation.
-- Execute commercial strategies across business models, venture creation, inbound marketing, and consultative sales.
-- Structure and deliver high-value technical consulting and freelance services.
-- Develop pedagogical and mentoring skills to accelerate the growth of peers and mentees.
-- Cultivate strong spiritual foundations, moral philosophy, and personal character integrity.
+- Understand the holistic architecture connecting technical engineering, commercial viability, client service, pedagogy, and personal character.
+- Establish a daily active recall and note-taking routine using the 3-pass learning system.
+- Survey the five primary pillars to identify immediate starter tracks and cross-domain synergies.
+- Navigate the graph tree, manage node lifecycle states, and decompose complex topics into child stations.
 
 ## Links & Resources
-- [Master System Rules](RULES.md)
-- [Roadmap.sh Developer Roadmaps](https://roadmap.sh/)
-- [Teach Yourself Computer Science](https://teachyourselfcs.com/)
+- [Roadmap & Content Rules](RULES.md)
+- [Roadmap.sh Interactive Roadmaps & Skill Trees](https://roadmap.sh/)
+- [Learning How to Learn: Key Concepts & Quick Self-Check](https://fs.blog/learning-how-to-learn/)

@@ -2,17 +2,15 @@
 
 **Status:** todo
 
-Scripting, headless browser automation, web scraping, workflow orchestration, API integrations, and autonomous task agents.
+Foundations of workflow automation: local scripting, repetitive task elimination, lightweight API fetching, and scheduled execution.
 
 ## Learning Outcomes
-- Automate repetitive file, system, and data tasks using Python scripting, Bash, and cron schedulers.
-- Build resilient browser automations and web scrapers using Playwright, Selenium, and BeautifulSoup.
-- Design event-driven workflows connecting webhooks, APIs, and cloud services using n8n and Python.
-- Implement CI/CD automation pipelines, automated test runs, and GitHub Actions workflows.
-- Develop AI-driven automation using LLM function calling, structured outputs, and agentic tool execution.
+- Recognize repetitive manual workflows and evaluate criteria for scripting vs. manual execution.
+- Write simple Python or shell scripts to automate file, folder, and text manipulation tasks.
+- Fetch and process JSON responses from an external web API without manual intervention.
+- Configure a basic recurring schedule using system schedulers (cron or Windows Task Scheduler).
 
 ## Links & Resources
-- [Automate the Boring Stuff with Python](https://automatetheboringstuff.com/)
-- [Playwright Documentation](https://playwright.dev/)
-- [n8n Workflow Automation Docs](https://docs.n8n.io/)
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [Automate the Boring Stuff: Bite-Sized Scripting Exercises](https://automatetheboringstuff.com/)
+- [LearnPython.org: Interactive In-Browser Python Drills](https://www.learnpython.org/)
+- [Crontab Guru: Interactive Schedule Expression Sandbox](https://crontab.guru/)
