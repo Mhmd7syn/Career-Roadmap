@@ -21,6 +21,19 @@
       <div class="breadcrumbs" id="breadcrumbs"></div>
     </div>
 
+    <!-- Global Deep Search Bar -->
+    <div class="header-center">
+      <div class="search-container" id="search-container">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="search-input" placeholder="Search stations, notes, files... (/)" autocomplete="off" spellcheck="false">
+        <kbd class="search-shortcut-hint" id="search-shortcut-hint">/</kbd>
+        <button type="button" class="btn-search-clear" id="btn-search-clear" style="display: none;" title="Clear search">&times;</button>
+        <div class="search-dropdown" id="search-dropdown" style="display: none;">
+          <div class="search-results-list" id="search-results-list"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="header-right">
       <!-- Next Learning Node Recommendation Pill -->
       <button class="next-node-pill" id="next-node-pill" style="display: none;" title="Next station to learn">

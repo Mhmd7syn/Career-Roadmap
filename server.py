@@ -313,6 +313,146 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             "message": "All stations in this section completed!"
         }
 
+    def _search_graph(self, query: str, limit: int = 30) -> tuple[list[dict], int]:
+        """
+        Deep search across:
+        1. Node titles and folder names
+        2. info.md content (mental models, outcomes, checkpoints)
+        3. notes.md content (personal synthesis, code)
+        4. Extra attached file names
+        Returns (sliced_results, total_matches).
+        """
+        query = query.strip()
+        if not query:
+            return [], 0
+
+        q_lower = query.lower()
+        results = []
+
+        def make_snippet(text: str, target_pos: int, length: int) -> str:
+            start = max(0, target_pos - 40)
+            end = min(len(text), target_pos + length + 60)
+            snippet = text[start:end].replace("\r", " ").replace("\n", " ").strip()
+            snippet = re.sub(r"\s+", " ", snippet)
+            if start > 0:
+                snippet = "..." + snippet
+            if end < len(text):
+                snippet = snippet + "..."
+            return snippet
+
+        for root, dirs, files in os.walk(GRAPH_DIR):
+            folder = Path(root)
+            if folder.name.startswith((".", "__")):
+                continue
+
+            rel_path = folder.relative_to(GRAPH_DIR).as_posix()
+            if rel_path == ".":
+                rel_path = ""
+
+            default_title = folder.name.replace("-", " ").replace("_", " ").title() if rel_path else "Root"
+            info_file = folder / "info.md"
+            notes_file = folder / "notes.md"
+
+            title, badge, status = self._parse_info_md(info_file, default_title)
+            breadcrumbs = self._build_breadcrumbs(folder)
+            category = " › ".join([b["title"] for b in breadcrumbs[:-1]]) if len(breadcrumbs) > 1 else "Root"
+
+            matched = False
+            best_match = None
+
+            # 1. Title or folder name match (Highest Priority)
+            title_lower = title.lower()
+            folder_lower = folder.name.lower()
+            if q_lower in title_lower:
+                best_match = {
+                    "matchType": "title",
+                    "score": 100,
+                    "matchedTerm": title,
+                    "snippet": f"Station: {title}"
+                }
+                matched = True
+            elif rel_path and q_lower in folder_lower:
+                best_match = {
+                    "matchType": "title",
+                    "score": 100,
+                    "matchedTerm": folder.name,
+                    "snippet": f"Folder: {folder.name}"
+                }
+                matched = True
+
+            # 2. info.md content match
+            if not matched and info_file.exists():
+                try:
+                    with open(info_file, "r", encoding="utf-8") as f_in:
+                        info_text = f_in.read()
+                    pos = info_text.lower().find(q_lower)
+                    if pos != -1:
+                        snippet = make_snippet(info_text, pos, len(query))
+                        best_match = {
+                            "matchType": "info",
+                            "score": 80,
+                            "matchedTerm": "info.md",
+                            "snippet": snippet
+                        }
+                        matched = True
+                except Exception:
+                    pass
+
+            # 3. notes.md content match
+            if not matched and notes_file.exists():
+                try:
+                    with open(notes_file, "r", encoding="utf-8") as f_notes:
+                        notes_text = f_notes.read()
+                    pos = notes_text.lower().find(q_lower)
+                    if pos != -1:
+                        snippet = make_snippet(notes_text, pos, len(query))
+                        best_match = {
+                            "matchType": "notes",
+                            "score": 70,
+                            "matchedTerm": "notes.md",
+                            "snippet": snippet
+                        }
+                        matched = True
+                except Exception:
+                    pass
+
+            # 4. Extra files match (Smallest Score)
+            if not matched:
+                for f in files:
+                    if f not in CORE_NODE_FILES and f not in IGNORED_SYSTEM_FILES and not f.startswith("."):
+                        if q_lower in f.lower():
+                            best_match = {
+                                "matchType": "file",
+                                "score": 60,
+                                "matchedTerm": f,
+                                "snippet": f"File: {f}"
+                            }
+                            matched = True
+                            break
+
+            if matched and best_match:
+                depth = len(breadcrumbs) - 1 if breadcrumbs else 0
+                results.append({
+                    "id": folder.name if rel_path else "root",
+                    "title": title,
+                    "relPath": rel_path,
+                    "status": status,
+                    "badge": badge,
+                    "category": category,
+                    "breadcrumbs": breadcrumbs,
+                    "depth": depth,
+                    "matchType": best_match["matchType"],
+                    "score": best_match["score"],
+                    "matchedTerm": best_match["matchedTerm"],
+                    "snippet": best_match["snippet"]
+                })
+
+        # Sort: Highest score first; on tie, higher level node (smaller depth) has priority
+        results.sort(key=lambda r: (-r["score"], r["depth"], len(r["title"]), r["title"].lower()))
+        total_count = len(results)
+        sliced = results[:limit] if limit > 0 else results
+        return sliced, total_count
+
     def _update_status_in_info_md(self, info_path: Path, new_status: str):
         if not info_path.exists():
             fallback_title = info_path.parent.name.replace("-", " ").replace("_", " ").title()
@@ -359,6 +499,11 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         # 3. API: Next Learning Node via BFS
         if path == "/api/next-node":
             self._handle_api_get_next_node(parsed.query)
+            return
+
+        # 4. API: Deep Search Across Titles, Content, and Files
+        if path == "/api/search":
+            self._handle_api_search(parsed.query)
             return
 
         # 3. API: Fallback graph
@@ -428,6 +573,24 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             node_dir = self._resolve_graph_folder(node_path_param)
             result = self._find_next_node_bfs(node_dir)
             self._send_json(200, result)
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_api_search(self, query_string: str):
+        """API handler for deep search across titles, info.md, notes.md, and extra files."""
+        params = urllib.parse.parse_qs(query_string)
+        q = params.get("q", [""])[0]
+        raw_limit = params.get("limit", ["30"])[0]
+        limit = int(raw_limit) if raw_limit.isdigit() else 30
+
+        try:
+            results, total = self._search_graph(q, limit=limit)
+            self._send_json(200, {
+                "query": q,
+                "total": total,
+                "count": len(results),
+                "results": results
+            })
         except Exception as e:
             self._send_json(400, {"error": str(e)})
 

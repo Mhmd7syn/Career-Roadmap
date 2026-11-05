@@ -851,10 +851,246 @@
   }
 
   // ---------------------------------------------------------------------------
+  // 9. Deep Search Engine
+  // ---------------------------------------------------------------------------
+
+  let searchResults = [];
+  let highlightedSearchIndex = -1;
+  let searchDebounceTimer = null;
+
+  function escapeHtml(text) {
+    if (!text) return '';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function highlightQueryText(text, query) {
+    if (!text || !query) return escapeHtml(text);
+    const escapedText = escapeHtml(text);
+    const escapedQuery = escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedQuery})`, 'gi');
+    return escapedText.replace(regex, '<mark class="search-highlight">$1</mark>');
+  }
+
+  function getSearchMatchIcon(matchType) {
+    switch (matchType) {
+      case 'title': return '🏷️';
+      case 'info': return 'ℹ️';
+      case 'notes': return '📝';
+      case 'file': return '📁';
+      default: return '📍';
+    }
+  }
+
+  function renderSearchResultsList(query, results, total = 0) {
+    const dropdown = document.getElementById('search-dropdown');
+    const list = document.getElementById('search-results-list');
+    if (!dropdown || !list) return;
+
+    list.innerHTML = '';
+    searchResults = results || [];
+    highlightedSearchIndex = searchResults.length > 0 ? 0 : -1;
+
+    if (!query || query.trim() === '') {
+      dropdown.style.display = 'none';
+      return;
+    }
+
+    if (searchResults.length === 0) {
+      list.innerHTML = `
+        <div class="search-empty-state">
+          No stations, notes, or files found for "<strong>${escapeHtml(query)}</strong>"
+        </div>
+      `;
+      dropdown.style.display = 'block';
+      return;
+    }
+
+    searchResults.forEach((item, index) => {
+      const itemEl = document.createElement('div');
+      itemEl.className = `search-result-item ${index === highlightedSearchIndex ? 'highlighted' : ''}`;
+      itemEl.dataset.index = String(index);
+
+      const icon = getSearchMatchIcon(item.matchType);
+      const highlightedTitle = highlightQueryText(item.title, query);
+      const highlightedSnippet = highlightQueryText(item.snippet, query);
+      const categoryText = escapeHtml(item.category || '');
+
+      const typeBadgeClass = `type-${item.matchType}`;
+      const typeLabel = item.matchType.toUpperCase();
+
+      itemEl.innerHTML = `
+        <div class="search-result-header">
+          <div class="search-result-title-group">
+            <span class="search-result-icon">${icon}</span>
+            <span class="search-result-title">${highlightedTitle}</span>
+            <span class="search-result-type-badge ${typeBadgeClass}">${typeLabel}</span>
+          </div>
+          <span class="search-result-category" title="${categoryText}">${categoryText}</span>
+        </div>
+        <div class="search-result-snippet">${highlightedSnippet}</div>
+      `;
+
+      itemEl.onmouseenter = () => {
+        highlightedSearchIndex = index;
+        updateHighlightedSearchResult();
+      };
+
+      itemEl.onclick = () => {
+        selectSearchResult(item);
+      };
+
+      list.appendChild(itemEl);
+    });
+
+    if (total > searchResults.length) {
+      const footerEl = document.createElement('div');
+      footerEl.className = 'search-results-footer';
+      footerEl.textContent = `Showing top ${searchResults.length} of ${total} matches`;
+      list.appendChild(footerEl);
+    }
+
+    dropdown.style.display = 'block';
+  }
+
+  function updateHighlightedSearchResult() {
+    const items = document.querySelectorAll('.search-result-item');
+    items.forEach((item, idx) => {
+      if (idx === highlightedSearchIndex) {
+        item.classList.add('highlighted');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('highlighted');
+      }
+    });
+  }
+
+  function selectSearchResult(item) {
+    if (!item) return;
+
+    const dropdown = document.getElementById('search-dropdown');
+    if (dropdown) dropdown.style.display = 'none';
+
+    const input = document.getElementById('search-input');
+    if (input) input.blur();
+
+    navigateToNode(item.relPath, item.breadcrumbs);
+
+    if (item.matchType === 'info') {
+      setTimeout(() => openMarkdownModal(item.relPath, 'info'), 150);
+    } else if (item.matchType === 'notes') {
+      setTimeout(() => openMarkdownModal(item.relPath, 'notes'), 150);
+    } else if (item.matchType === 'file') {
+      setTimeout(() => {
+        if (currentNode) openExtraFilesModal(currentNode);
+      }, 150);
+    }
+  }
+
+  function setupSearch() {
+    const searchInput = document.getElementById('search-input');
+    const searchDropdown = document.getElementById('search-dropdown');
+    const btnClear = document.getElementById('btn-search-clear');
+    const container = document.getElementById('search-container');
+
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value;
+      if (btnClear) btnClear.style.display = query ? 'block' : 'none';
+
+      clearTimeout(searchDebounceTimer);
+      if (!query.trim()) {
+        if (searchDropdown) searchDropdown.style.display = 'none';
+        searchResults = [];
+        return;
+      }
+
+      searchDebounceTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=30`, { cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            renderSearchResultsList(query.trim(), data.results || [], data.total || 0);
+          }
+        } catch (e) {
+          console.warn('Search query error:', e);
+        }
+      }, 150);
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (searchResults.length > 0) {
+          highlightedSearchIndex = (highlightedSearchIndex + 1) % searchResults.length;
+          updateHighlightedSearchResult();
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (searchResults.length > 0) {
+          highlightedSearchIndex = (highlightedSearchIndex - 1 + searchResults.length) % searchResults.length;
+          updateHighlightedSearchResult();
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (highlightedSearchIndex >= 0 && searchResults[highlightedSearchIndex]) {
+          selectSearchResult(searchResults[highlightedSearchIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        if (searchDropdown) searchDropdown.style.display = 'none';
+        searchInput.blur();
+      }
+    });
+
+    if (btnClear) {
+      btnClear.onclick = () => {
+        searchInput.value = '';
+        btnClear.style.display = 'none';
+        if (searchDropdown) searchDropdown.style.display = 'none';
+        searchResults = [];
+        searchInput.focus();
+      };
+    }
+
+    document.addEventListener('click', (e) => {
+      if (container && !container.contains(e.target)) {
+        if (searchDropdown) searchDropdown.style.display = 'none';
+      }
+    });
+
+    searchInput.addEventListener('focus', () => {
+      if (searchInput.value.trim() && searchResults.length > 0) {
+        if (searchDropdown) searchDropdown.style.display = 'block';
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || document.activeElement.isContentEditable;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      } else if (e.key === '/' && !isInput) {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // 10. Event Listeners & Bootstrapping
   // ---------------------------------------------------------------------------
 
   function setupEventListeners() {
+    setupSearch();
     const logo = document.getElementById('logo');
     if (logo) {
       logo.onclick = () => {
