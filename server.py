@@ -18,6 +18,7 @@ import sys
 import json
 import socket
 import base64
+import shutil
 import urllib.parse
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -25,9 +26,24 @@ import webbrowser
 import threading
 
 BASE_DIR = Path(__file__).resolve().parent
-GRAPH_DIR = BASE_DIR / "graph"
+GRAPH_DIR = Path(os.getenv("GRAPH_DIR", BASE_DIR / "graph")).resolve()
+TEMPLATE_DIR = BASE_DIR / "graph.template"
 CORE_NODE_FILES = {"info.md", "notes.md"}
 IGNORED_SYSTEM_FILES = {".DS_Store", "desktop.ini", "Thumbs.db"}
+
+
+def ensure_graph_initialized():
+    """Ensure GRAPH_DIR exists and populate from TEMPLATE_DIR if empty."""
+    GRAPH_DIR.mkdir(parents=True, exist_ok=True)
+    has_content = any(p for p in GRAPH_DIR.iterdir() if not p.name.startswith((".", "__")))
+    if not has_content and TEMPLATE_DIR.exists() and TEMPLATE_DIR.is_dir():
+        print(f"[Init] Initializing graph data from template: {TEMPLATE_DIR}")
+        for item in TEMPLATE_DIR.iterdir():
+            dest = GRAPH_DIR / item.name
+            if item.is_dir():
+                shutil.copytree(item, dest, dirs_exist_ok=True)
+            else:
+                shutil.copy2(item, dest)
 
 
 class GraphRequestHandler(SimpleHTTPRequestHandler):
@@ -445,12 +461,12 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             child_dir.mkdir(parents=True, exist_ok=True)
 
             # 1. info.md
-            info_content = f"# {name}\n\n**Status:** todo\n\n"
+            info_content = f"# {name}\n\n**Status:** todo\n\n## Learning Outcomes\n\n\n## Links & Resources\n\n"
             with open(child_dir / "info.md", "w", encoding="utf-8") as f:
                 f.write(info_content)
 
-            # 2. notes.md
-            notes_content = f"# {name} — Notes\n\n"
+            # 2. notes.md (empty with only the title)
+            notes_content = f"# {name}\n\n"
             with open(child_dir / "notes.md", "w", encoding="utf-8") as f:
                 f.write(notes_content)
 
@@ -523,6 +539,7 @@ def find_available_port(starting_port=8000, max_attempts=50):
 
 
 def run_server(port=8000, open_browser=True):
+    ensure_graph_initialized()
     port = find_available_port(port)
     server_address = ("127.0.0.1", port)
     httpd = HTTPServer(server_address, GraphRequestHandler)
