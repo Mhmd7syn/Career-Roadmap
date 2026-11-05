@@ -10,6 +10,11 @@ Foundational introduction to venture creation: customer pain point identificatio
 - Define a minimal viable offer (MVO) or landing test to validate buyer interest before building.
 - Draft non-leading customer discovery questions to gather objective feedback from target users.
 
+## Checkpoint
+- [ ] Can you state a value proposition in one sentence using: "We help [X] solve [Y] by [Z]"?
+- [ ] What is the "Mom Test" rule for asking about past behavior rather than hypothetical future opinions?
+- [ ] What is the simplest experiment you could run to test if customers will pay before writing code?
+
 ## Links & Resources
 - [The Mom Test: Concise Interview Rules & Bad Question Traps](https://robfitz.com/)
 - [Strategyzer: Value Proposition Canvas Template & Walkthrough](https://www.strategyzer.com/library/the-value-proposition-canvas)

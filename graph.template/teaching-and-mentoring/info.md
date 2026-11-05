@@ -10,6 +10,11 @@ Foundations of technical mentorship and pedagogy: breaking down complex concepts
 - Write constructive, empathetic code review comments that clarify the rationale behind improvements.
 - Use diagnostic questioning to guide learners toward self-discovery instead of prematurely giving solutions.
 
+## Checkpoint
+- [ ] Can you explain a complex concept (e.g., recursion or caching) using the 4 steps of the Feynman Technique?
+- [ ] What is the difference between giving a mentee the answer vs. asking a diagnostic question?
+- [ ] How do you phrase code review feedback so it critiques the code rather than the author?
+
 ## Links & Resources
 - [The Feynman Technique: 4-Step Learning & Teaching Guide](https://fs.blog/feynman-technique/)
 - [Google Engineering Practices: How to Do a Code Review (Concise Guidelines)](https://google.github.io/eng-practices/review/reviewer/)

@@ -10,6 +10,11 @@ High-level entry point into computing science: maps the computational landscape,
 - Establish a clean local coding environment and interactive REPL setup for rapid experimentation.
 - Recognize trade-offs between algorithmic complexity, system maintainability, and resource utilization.
 
+## Checkpoint
+- [ ] Can you define the core distinction between Foundations, AI, Data, and SWE with one example each?
+- [ ] Can you explain the difference between functional purity and object state mutation?
+- [ ] Do you have a local interactive REPL (e.g., Python / Node.js) ready for rapid code drills?
+
 ## Links & Resources
 - [CS50 Interactive Concepts & Practice Labs](https://cs50.harvard.edu/x/)
 - [Exercism Interactive Programming Tracks & Mentored Exercises](https://exercism.org/)

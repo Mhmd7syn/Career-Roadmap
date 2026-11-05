@@ -10,6 +10,11 @@ Foundational launchpad and navigation root across the five core life domains: Te
 - Survey the five primary pillars to identify immediate starter tracks and cross-domain synergies.
 - Navigate the graph tree, manage node lifecycle states, and decompose complex topics into child stations.
 
+## Checkpoint
+- [ ] Can you explain the 3-pass learning loop and where active recall vs. production synthesis happens?
+- [ ] Have you chosen your initial primary track among the five top-level domains?
+- [ ] Can you navigate the visual graph stage and create a child station on disk?
+
 ## Links & Resources
 - [Roadmap & Content Rules](RULES.md)
 - [Roadmap.sh Interactive Roadmaps & Skill Trees](https://roadmap.sh/)

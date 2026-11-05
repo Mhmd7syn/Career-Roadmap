@@ -10,6 +10,11 @@ Core computational fundamentals: time/space complexity analysis, elementary data
 - Understand memory organization fundamentals (stack vs. heap allocations, pointers/references, cache lines).
 - Apply essential algorithm patterns (two pointers, sliding window, binary search) on introductory practice problems.
 
+## Checkpoint
+- [ ] Can you derive the Big-O time and space complexity of a nested loop vs. a binary search?
+- [ ] Can you implement an array-based stack and explain why hash map lookups are average $O(1)$?
+- [ ] Can you describe the difference between stack and heap memory allocation in code execution?
+
 ## Links & Resources
 - [Visualgo: Interactive Data Structure Visualizations & Quizzes](https://visualgo.net/)
 - [NeetCode: Guided Algorithm Practice Problems & Video Walkthroughs](https://neetcode.io/practice)

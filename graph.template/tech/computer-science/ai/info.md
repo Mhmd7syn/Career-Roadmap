@@ -10,6 +10,11 @@ Foundational introduction to artificial intelligence: core taxonomy, mathematica
 - Set up a clean Python AI development environment with PyTorch, NumPy, and Hugging Face libraries.
 - Run, train, and evaluate a baseline model on standard benchmark datasets using common accuracy metrics.
 
+## Checkpoint
+- [ ] Can you explain how gradient descent updates model weights using a loss function?
+- [ ] Can you perform basic matrix multiplication and tensor reshaping in NumPy or PyTorch?
+- [ ] Why must evaluation data strictly be kept separate from training data?
+
 ## Links & Resources
 - [Google Machine Learning Crash Course (Interactive Modules & Quizzes)](https://developers.google.com/machine-learning/crash-course)
 - [DeepLearning.AI Short Practice Courses & Notebooks](https://www.deeplearning.ai/short-courses/)

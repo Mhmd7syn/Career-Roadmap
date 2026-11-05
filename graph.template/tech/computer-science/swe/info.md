@@ -10,6 +10,11 @@ Foundations of software engineering: client-server architecture, baseline REST A
 - Connect an application service to a local database to perform baseline CRUD operations.
 - Write a simple Dockerfile to package a minimal web application into a runnable local container.
 
+## Checkpoint
+- [ ] Can you explain the semantics of HTTP GET, POST, PUT, and DELETE with status codes 200, 201, 400, 404, 500?
+- [ ] Can you write and run a minimal REST endpoint in your preferred language that queries a local database?
+- [ ] Can you build a Docker image and run it locally with port binding?
+
 ## Links & Resources
 - [FastAPI First Steps: Concise Interactive API Tutorial](https://fastapi.tiangolo.com/tutorial/first-steps/)
 - [Play with Docker: Interactive In-Browser Labs & Drills](https://labs.play-with-docker.com/)

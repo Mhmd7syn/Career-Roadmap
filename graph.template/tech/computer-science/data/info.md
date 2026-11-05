@@ -10,6 +10,11 @@ Foundational introduction to data engineering: relational queries, tabular repre
 - Recognize primary data formats (CSV, JSON, Parquet) and fundamental tabular schema constraints.
 - Set up a lightweight local data exploration tool (DuckDB or SQLite) to query and validate datasets.
 
+## Checkpoint
+- [ ] Can you write a SQL query using `JOIN`, `GROUP BY`, and `HAVING` from scratch?
+- [ ] When should data be stored in columnar Parquet vs. row-based CSV/JSON?
+- [ ] Can you explain why running heavy analytics on an operational OLTP database is dangerous?
+
 ## Links & Resources
 - [SQLBolt: Interactive Lessons & In-Browser Practice Queries](https://sqlbolt.com/)
 - [Select Star SQL: Interactive Real-World Data Exercises](https://selectstarsql.com/)
