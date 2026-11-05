@@ -15,6 +15,7 @@
   const nodeCache = {}; // relPath -> node data
   let historyStack = [{ id: 'root', relPath: '', title: '' }];
   let currentNode = null;
+  let currentRecommendedNode = null;
   let activeModalNodeRelPath = '';
   let activeDocType = 'info'; // 'info' (info.md) | 'notes' (notes.md)
   let activeEditorMode = 'preview'; // 'preview' | 'edit'
@@ -40,6 +41,31 @@
         item.title = title;
       }
     }
+  }
+
+  function navigateToNode(relPath, breadcrumbs = null) {
+    if (breadcrumbs && Array.isArray(breadcrumbs) && breadcrumbs.length > 0) {
+      historyStack = breadcrumbs.map(b => ({
+        id: b.id,
+        relPath: b.relPath,
+        title: b.title
+      }));
+    } else {
+      if (!relPath) {
+        historyStack = [{ id: 'root', relPath: '', title: 'Root' }];
+      } else {
+        const parts = relPath.split('/');
+        historyStack = [{ id: 'root', relPath: '', title: 'Root' }];
+        let currPath = '';
+        for (const part of parts) {
+          currPath = currPath ? `${currPath}/${part}` : part;
+          const cached = nodeCache[currPath];
+          const title = cached ? cached.title : part.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          historyStack.push({ id: part, relPath: currPath, title: title });
+        }
+      }
+    }
+    loadNodeOnDemand(relPath, false, 'forward');
   }
 
   // ---------------------------------------------------------------------------
@@ -71,6 +97,7 @@
       syncHistoryTitle(relPath, currentNode.title);
       if (currentNode.title) document.title = `${currentNode.title} — Knowledge Graph`;
       renderCurrentView(direction);
+      updateNextNodeRecommendation(relPath);
       return;
     }
 
@@ -83,6 +110,7 @@
         syncHistoryTitle(relPath, data.title);
         if (data.title) document.title = `${data.title} — Knowledge Graph`;
         renderCurrentView(direction);
+        updateNextNodeRecommendation(relPath);
       }
     } catch (err) {
       console.error('Error loading node from disk:', err);
@@ -108,12 +136,94 @@
           currentNode = data.node;
         }
         updateProgressStats();
+        updateNextNodeRecommendation(relPath);
       }
     } catch (err) {
       console.warn('Failed to save status to disk:', err);
     }
 
     renderCurrentView();
+  }
+
+  async function updateNextNodeRecommendation(relPath = '') {
+    const nextPill = document.getElementById('next-node-pill');
+    const nextLabel = document.getElementById('next-node-label');
+    const nextTitle = document.getElementById('next-node-title');
+    const nextBanner = document.getElementById('next-node-banner');
+    const bannerKicker = document.getElementById('next-banner-kicker');
+    const bannerTitle = document.getElementById('next-banner-title');
+    const bannerCategory = document.getElementById('next-banner-category');
+    const bannerJumpBtn = document.getElementById('btn-next-banner-jump');
+
+    if (!nextPill) return;
+
+    try {
+      const res = await fetch(`/api/next-node?path=${encodeURIComponent(relPath)}`, { cache: 'no-store' });
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      if (data.found && data.node) {
+        currentRecommendedNode = data.node;
+        const node = data.node;
+        const isCurrent = data.isCurrentNode;
+
+        nextPill.style.display = 'inline-flex';
+        nextPill.classList.remove('is-completed');
+        if (isCurrent) {
+          nextPill.classList.add('is-current');
+          nextLabel.textContent = 'Current:';
+          nextPill.title = `Current Focus: ${node.title} (${node.category}) — click to view info.md`;
+        } else {
+          nextPill.classList.remove('is-current');
+          nextLabel.textContent = 'Next:';
+          nextPill.title = `Next to Learn: ${node.title} in ${node.category} — click to jump`;
+        }
+        nextTitle.textContent = node.title;
+
+        if (nextBanner) {
+          nextBanner.style.display = 'flex';
+          nextBanner.classList.remove('all-completed');
+          if (isCurrent) {
+            bannerKicker.textContent = '🎯 CURRENT LEARNING STATION';
+            bannerTitle.textContent = node.title;
+            bannerCategory.textContent = `in ${node.category} • Complete checkpoints in info.md`;
+            if (bannerJumpBtn) bannerJumpBtn.style.display = 'none';
+          } else {
+            bannerKicker.textContent = '🎯 RECOMMENDED NEXT STATION';
+            bannerTitle.textContent = node.title;
+            bannerCategory.textContent = `in ${node.category}`;
+            if (bannerJumpBtn) {
+              bannerJumpBtn.style.display = 'inline-flex';
+              bannerJumpBtn.innerHTML = `<span>Go to Station</span> →`;
+            }
+          }
+        }
+      } else if (data.allCompleted) {
+        currentRecommendedNode = null;
+        nextPill.style.display = 'inline-flex';
+        nextPill.classList.remove('is-current');
+        nextPill.classList.add('is-completed');
+        nextLabel.textContent = 'Status:';
+        nextTitle.textContent = 'Completed 🎉';
+        nextPill.title = 'All stations in this section are completed!';
+
+        if (nextBanner) {
+          nextBanner.style.display = 'flex';
+          nextBanner.classList.add('all-completed');
+          bannerKicker.textContent = '🎉 ALL CAUGHT UP';
+          bannerTitle.textContent = 'All stations completed!';
+          bannerCategory.textContent = 'Great work! All stations in this section are marked done.';
+          if (bannerJumpBtn) bannerJumpBtn.style.display = 'none';
+        }
+      } else {
+        nextPill.style.display = 'none';
+        if (nextBanner) nextBanner.style.display = 'none';
+        currentRecommendedNode = null;
+      }
+    } catch (e) {
+      console.warn('Failed to load next node recommendation:', e);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -830,6 +940,29 @@
       };
     }
 
+    // Next Learning Node Recommendation Pill & Banner
+    const nextPill = document.getElementById('next-node-pill');
+    if (nextPill) {
+      nextPill.onclick = () => {
+        if (currentRecommendedNode) {
+          if (currentRecommendedNode.relPath !== getCurrentRelPath()) {
+            navigateToNode(currentRecommendedNode.relPath, currentRecommendedNode.breadcrumbs);
+          } else {
+            openMarkdownModal(currentRecommendedNode.relPath, 'info');
+          }
+        }
+      };
+    }
+
+    const btnNextBannerJump = document.getElementById('btn-next-banner-jump');
+    if (btnNextBannerJump) {
+      btnNextBannerJump.onclick = () => {
+        if (currentRecommendedNode && currentRecommendedNode.relPath !== getCurrentRelPath()) {
+          navigateToNode(currentRecommendedNode.relPath, currentRecommendedNode.breadcrumbs);
+        }
+      };
+    }
+
     // Keyboard Shortcuts (Ctrl+S / Cmd+S)
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -846,6 +979,7 @@
     setupEventListeners();
     await loadNodeOnDemand('', false);
     updateProgressStats();
+    updateNextNodeRecommendation('');
   }
 
   if (document.readyState === 'loading') {

@@ -15,7 +15,6 @@ A lightweight, offline-first, **Directory-as-Graph** visual knowledge platform a
 - **Markdown-First Content:** Every node is strictly governed by two core markdown documents:
   - `info.md`: Node title, completion status (`todo`, `in-progress`, `completed`), learning outcomes, and curated links.
   - `notes.md`: Personal study notes, code implementations, architectural insights, and LaTeX formulas.
-- **Parent-Child Status Cascading:** Dynamic aggregation ensures parent nodes reflect `in-progress` until all leaf children are `completed`.
 - **Focused Local Graph Canvas:** Smooth spline-connected local stage presenting strictly the active parent node and its immediate children, keeping cognitive load minimal.
 - **Single-Click Node Creation:** Add new child stations instantly via the interactive `+` action with direct disk persistence.
 - **Zero External Dependencies:** No `npm install`, no `pip install`. Runs directly on Python's built-in standard library with vendored offline libraries ([KaTeX](libs/katex.min.js) and [Marked.js](libs/marked.min.js)).
@@ -79,11 +78,10 @@ git submodule add https://github.com/<your-username>/<your-private-repo>.git gra
 ## Roadmap & Content Rules
 
 The roadmap content and future node expansions are strictly governed by [`RULES.md`](RULES.md):
-1. **Starter Node Scoping:** Every node's `info.md` acts as a starter launching pad; no premature mastery of child stations.
-2. **Short, Interactive & High-Yield Sourcing:** Concise resources prioritizing practice problems, quickstarts, and interactive quizzes (2–4 links max).
-3. **Strict Document Separation:** `info.md` for reference criteria and links; `notes.md` exclusively for personal synthesis and notes.
-4. **Anti-Pollution:** Zero unnecessary filler, clutter, or decorative emojis.
-5. **Progressive Learning Engine:** Breadth before depth, leaf-node active drills, and the 3-Pass learning methodology.
+1. **Starter Node Scoping:** Every station's `info.md` acts as a starter launching pad; child subfolders handle deep specializations.
+2. **High-Yield Sourcing:** Laser-focused resources prioritizing practice problems, quickstarts, and active recall (3–4 links max).
+3. **Clean Formatting & Separation:** Zero filler or decorative emojis; `info.md` stays concise while `notes.md` stores deep synthesis.
+4. **The 3-Pass Learning Engine:** Fast concept intake, interactive recall drills, and production synthesis before advancement.
 
 ---
 

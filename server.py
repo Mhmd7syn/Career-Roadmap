@@ -21,6 +21,7 @@ import base64
 import shutil
 import urllib.parse
 from pathlib import Path
+from collections import deque
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import webbrowser
 import threading
@@ -118,13 +119,13 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     title = stripped[2:].strip()
                     continue
 
-                if "status:" in stripped.lower():
-                    m_stat = re.search(r"status:\s*([a-zA-Z0-9_\-]+)", stripped, re.IGNORECASE)
+                if "status" in stripped.lower():
+                    m_stat = re.search(r"status[:\*]+\s*([a-zA-Z0-9_\-]+)", stripped, re.IGNORECASE)
                     if m_stat:
                         status = m_stat.group(1).lower()
 
-                if "badge:" in stripped.lower():
-                    m_badge = re.search(r"badge:\s*([^|\n*]+)", stripped, re.IGNORECASE)
+                if "badge" in stripped.lower():
+                    m_badge = re.search(r"badge[:\*]+\s*([^|\n*]+)", stripped, re.IGNORECASE)
                     if m_badge:
                         badge = m_badge.group(1).strip()
 
@@ -204,47 +205,113 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             "status": status,
             "children": children,
             "extraFiles": extra_files,
+            "breadcrumbs": self._build_breadcrumbs(folder),
             "infoExists": info_file.exists(),
             "notesExists": notes_file.exists(),
             "info": info_content,
             "notes": notes_content
         }
 
-    def _cascade_status(self, node_dir: Path):
-        """Cascades completion status upwards across directory hierarchy."""
-        curr = node_dir
-        while curr != GRAPH_DIR and curr.parent.is_relative_to(GRAPH_DIR):
-            parent_dir = curr.parent
-            parent_info_file = parent_dir / "info.md"
+    def _build_breadcrumbs(self, folder: Path) -> list[dict]:
+        """Build breadcrumbs trail from Root to folder."""
+        if folder == GRAPH_DIR or not folder.is_relative_to(GRAPH_DIR):
+            return [{"id": "root", "title": "Root", "relPath": ""}]
 
-            subdirs = [d for d in parent_dir.iterdir() if d.is_dir() and not d.name.startswith((".", "__"))]
-            if not subdirs or not parent_info_file.exists():
-                break
+        rel = folder.relative_to(GRAPH_DIR)
+        breadcrumbs = [{"id": "root", "title": "Root", "relPath": ""}]
+        curr = GRAPH_DIR
+        for part in rel.parts:
+            curr = curr / part
+            info_file = curr / "info.md"
+            title, _, _ = self._parse_info_md(info_file, part.replace("-", " ").replace("_", " ").title())
+            c_rel = curr.relative_to(GRAPH_DIR).as_posix()
+            breadcrumbs.append({"id": part, "title": title, "relPath": c_rel})
+        return breadcrumbs
 
-            all_completed = True
-            any_active = False
+    def _find_next_node_bfs(self, start_dir: Path) -> dict:
+        """
+        BFS from start_dir returning the first uncompleted station:
+        - If start_dir is an uncompleted leaf (not root), return it as current focus.
+        - Otherwise, traverse descendants in BFS order (level by level, alphabetical)
+          and return the first station with status != 'completed'.
+        - If all descendants are completed, indicate all completed.
+        """
+        def get_subdirs(d: Path) -> list[Path]:
+            if not d.exists() or not d.is_dir():
+                return []
+            subdirs = [p for p in d.iterdir() if p.is_dir() and not p.name.startswith((".", "__"))]
+            return sorted(subdirs, key=lambda x: x.name.lower())
 
-            for cd in subdirs:
-                cinfo = cd / "info.md"
-                _, _, cstatus = self._parse_info_md(cinfo, cd.name)
-                if cstatus != "completed":
-                    all_completed = False
-                if cstatus in ("in-progress", "completed"):
-                    any_active = True
+        immediate_subdirs = get_subdirs(start_dir)
 
-            _, _, old_status = self._parse_info_md(parent_info_file, parent_dir.name)
-            new_status = old_status
+        # 1. Scoped context: If start_dir is a leaf station (not Root)
+        if start_dir != GRAPH_DIR and not immediate_subdirs:
+            info_file = start_dir / "info.md"
+            title, badge, status = self._parse_info_md(info_file, start_dir.name.replace("-", " ").replace("_", " ").title())
+            if status != "completed":
+                breadcrumbs = self._build_breadcrumbs(start_dir)
+                category = breadcrumbs[-2]["title"] if len(breadcrumbs) > 1 else "Root"
+                rel_p = start_dir.relative_to(GRAPH_DIR).as_posix() if start_dir.is_relative_to(GRAPH_DIR) else start_dir.name
+                return {
+                    "found": True,
+                    "isCurrentNode": True,
+                    "allCompleted": False,
+                    "node": {
+                        "id": start_dir.name,
+                        "title": title,
+                        "badge": badge,
+                        "status": status,
+                        "relPath": rel_p,
+                        "category": category,
+                        "breadcrumbs": breadcrumbs
+                    }
+                }
+            else:
+                return {
+                    "found": False,
+                    "isCurrentNode": True,
+                    "allCompleted": True,
+                    "node": None,
+                    "message": "Current station is completed."
+                }
 
-            if all_completed:
-                new_status = "completed"
-            elif any_active or old_status == "completed":
-                new_status = "in-progress"
+        # 2. BFS queue over descendants
+        queue = deque(immediate_subdirs)
 
-            if new_status != old_status:
-                self._update_status_in_info_md(parent_info_file, new_status)
-                print(f"[Cascade]: {parent_info_file} -> {new_status}")
+        while queue:
+            curr = queue.popleft()
+            info_file = curr / "info.md"
+            title, badge, status = self._parse_info_md(info_file, curr.name.replace("-", " ").replace("_", " ").title())
 
-            curr = parent_dir
+            if status != "completed":
+                breadcrumbs = self._build_breadcrumbs(curr)
+                category = breadcrumbs[-2]["title"] if len(breadcrumbs) > 1 else "Root"
+                curr_rel = curr.relative_to(GRAPH_DIR).as_posix() if curr.is_relative_to(GRAPH_DIR) else curr.name
+                return {
+                    "found": True,
+                    "isCurrentNode": False,
+                    "allCompleted": False,
+                    "node": {
+                        "id": curr.name,
+                        "title": title,
+                        "badge": badge,
+                        "status": status,
+                        "relPath": curr_rel,
+                        "category": category,
+                        "breadcrumbs": breadcrumbs
+                    }
+                }
+
+            # Enqueue children for next BFS level
+            queue.extend(get_subdirs(curr))
+
+        return {
+            "found": False,
+            "isCurrentNode": False,
+            "allCompleted": True,
+            "node": None,
+            "message": "All stations in this section completed!"
+        }
 
     def _update_status_in_info_md(self, info_path: Path, new_status: str):
         if not info_path.exists():
@@ -287,6 +354,11 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         # 2. API: Fast Overall Progress Stats
         if path == "/api/stats":
             self._handle_api_get_stats()
+            return
+
+        # 3. API: Next Learning Node via BFS
+        if path == "/api/next-node":
+            self._handle_api_get_next_node(parsed.query)
             return
 
         # 3. API: Fallback graph
@@ -346,6 +418,18 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             "completed": completed,
             "percent": percent
         })
+
+    def _handle_api_get_next_node(self, query_string: str):
+        """Find the next uncompleted station using BFS from the requested node."""
+        params = urllib.parse.parse_qs(query_string)
+        node_path_param = params.get("path", [""])[0]
+
+        try:
+            node_dir = self._resolve_graph_folder(node_path_param)
+            result = self._find_next_node_bfs(node_dir)
+            self._send_json(200, result)
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -424,7 +508,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             info_file = node_dir / "info.md"
 
             self._update_status_in_info_md(info_file, status)
-            self._cascade_status(node_dir)
             print(f"[Status Saved in info.md]: {info_file} -> {status}")
 
             self._send_json(200, {
@@ -479,15 +562,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             notes_content = f"# {name}\n\n"
             with open(child_dir / "notes.md", "w", encoding="utf-8") as f:
                 f.write(notes_content)
-
-            # Cascade parent status
-            parent_info = parent_dir / "info.md"
-            if parent_info.exists():
-                _, _, pstatus = self._parse_info_md(parent_info, parent_dir.name)
-                if pstatus == "completed":
-                    self._update_status_in_info_md(parent_info, "in-progress")
-
-            self._cascade_status(parent_dir)
 
             print(f"[Child Created]: {child_dir} under {parent_path}")
             self._send_json(200, {

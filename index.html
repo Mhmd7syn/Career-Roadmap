@@ -22,6 +22,13 @@
     </div>
 
     <div class="header-right">
+      <!-- Next Learning Node Recommendation Pill -->
+      <button class="next-node-pill" id="next-node-pill" style="display: none;" title="Next station to learn">
+        <span class="next-node-icon">🎯</span>
+        <span class="next-node-label" id="next-node-label">Next:</span>
+        <span class="next-node-title" id="next-node-title">Station</span>
+      </button>
+
       <!-- Overall Progress -->
       <div class="progress-pill" id="overall-progress-pill" title="Overall Graph Completion">
         <div class="progress-pill-bar"><div class="progress-pill-fill" id="overall-progress-fill"></div></div>
@@ -32,6 +39,23 @@
 
   <!-- Focused Graph Stage -->
   <main class="graph-main">
+    <!-- Next Learning Node Recommendation Banner -->
+    <div class="next-node-banner" id="next-node-banner" style="display: none;">
+      <div class="next-banner-content">
+        <span class="next-banner-icon" id="next-banner-icon">🎯</span>
+        <div class="next-banner-text">
+          <div class="next-banner-kicker" id="next-banner-kicker">RECOMMENDED NEXT STATION</div>
+          <div class="next-banner-heading">
+            <span class="next-banner-title" id="next-banner-title">Station</span>
+            <span class="next-banner-category" id="next-banner-category"></span>
+          </div>
+        </div>
+      </div>
+      <button class="btn-next-banner-jump" id="btn-next-banner-jump">
+        <span>Go to Station</span> →
+      </button>
+    </div>
+
     <div class="graph-stage" id="graph-stage">
       <svg class="graph-svg" id="graph-svg"></svg>
       <div class="graph-content-layer" id="graph-content-layer">
