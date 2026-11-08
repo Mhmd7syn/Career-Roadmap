@@ -258,12 +258,21 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
     def _find_next_node_bfs(self, start_dir: Path) -> dict:
         """
-        BFS from start_dir returning the first uncompleted station:
-        - If start_dir is an uncompleted leaf (not root), return it as current focus.
+        BFS from start_dir returning the next uncompleted station:
+        - First check start_dir itself (the current station): if uncompleted, return it as current focus.
         - Otherwise, traverse descendants in BFS order (level by level, alphabetical)
           and return the first station with status != 'completed'.
         - If all descendants are completed, indicate all completed.
         """
+        if not start_dir.exists() or not start_dir.is_dir():
+            return {
+                "found": False,
+                "isCurrentNode": False,
+                "allCompleted": False,
+                "node": None,
+                "message": "Station directory does not exist."
+            }
+
         def get_subdirs(d: Path) -> list[Path]:
             if not d.exists() or not d.is_dir():
                 return []
@@ -272,38 +281,31 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         immediate_subdirs = get_subdirs(start_dir)
 
-        # 1. Scoped context: If start_dir is a leaf station (not Root)
-        if start_dir != GRAPH_DIR and not immediate_subdirs:
-            info_file = start_dir / "info.md"
-            title, badge, status = self._parse_info_md(info_file, start_dir.name.replace("-", " ").replace("_", " ").title())
-            if status != "completed":
-                breadcrumbs = self._build_breadcrumbs(start_dir)
-                category = breadcrumbs[-2]["title"] if len(breadcrumbs) > 1 else "Root"
-                rel_p = start_dir.relative_to(GRAPH_DIR).as_posix() if start_dir.is_relative_to(GRAPH_DIR) else start_dir.name
-                return {
-                    "found": True,
-                    "isCurrentNode": True,
-                    "allCompleted": False,
-                    "node": {
-                        "id": start_dir.name,
-                        "title": title,
-                        "badge": badge,
-                        "status": status,
-                        "relPath": rel_p,
-                        "category": category,
-                        "breadcrumbs": breadcrumbs
-                    }
-                }
-            else:
-                return {
-                    "found": False,
-                    "isCurrentNode": True,
-                    "allCompleted": True,
-                    "node": None,
-                    "message": "Current station is completed."
-                }
+        # 1. Scoped context: Check the current node first (Root or any station)
+        info_file = start_dir / "info.md"
+        default_title = start_dir.name.replace("-", " ").replace("_", " ").title() if start_dir != GRAPH_DIR else "Root"
+        title, badge, status = self._parse_info_md(info_file, default_title)
 
-        # 2. BFS queue over descendants
+        if status != "completed":
+            breadcrumbs = self._build_breadcrumbs(start_dir)
+            category = breadcrumbs[-2]["title"] if len(breadcrumbs) > 1 else "Root"
+            rel_p = start_dir.relative_to(GRAPH_DIR).as_posix() if start_dir != GRAPH_DIR else ""
+            return {
+                "found": True,
+                "isCurrentNode": True,
+                "allCompleted": False,
+                "node": {
+                    "id": start_dir.name if start_dir != GRAPH_DIR else "root",
+                    "title": title,
+                    "badge": badge,
+                    "status": status,
+                    "relPath": rel_p,
+                    "category": category,
+                    "breadcrumbs": breadcrumbs
+                }
+            }
+
+        # 2. BFS queue over descendants (if current node is completed)
         queue = deque(immediate_subdirs)
 
         while queue:

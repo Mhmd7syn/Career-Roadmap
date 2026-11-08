@@ -153,11 +153,6 @@
     const nextPill = document.getElementById('next-node-pill');
     const nextLabel = document.getElementById('next-node-label');
     const nextTitle = document.getElementById('next-node-title');
-    const nextBanner = document.getElementById('next-node-banner');
-    const bannerKicker = document.getElementById('next-banner-kicker');
-    const bannerTitle = document.getElementById('next-banner-title');
-    const bannerCategory = document.getElementById('next-banner-category');
-    const bannerJumpBtn = document.getElementById('btn-next-banner-jump');
 
     if (!nextPill) return;
 
@@ -184,25 +179,6 @@
           nextPill.title = `Next to Learn: ${node.title} in ${node.category} — click to jump`;
         }
         nextTitle.textContent = node.title;
-
-        if (nextBanner) {
-          nextBanner.style.display = 'flex';
-          nextBanner.classList.remove('all-completed');
-          if (isCurrent) {
-            bannerKicker.textContent = '🎯 CURRENT LEARNING STATION';
-            bannerTitle.textContent = node.title;
-            bannerCategory.textContent = `in ${node.category} • Complete checkpoints in info.md`;
-            if (bannerJumpBtn) bannerJumpBtn.style.display = 'none';
-          } else {
-            bannerKicker.textContent = '🎯 RECOMMENDED NEXT STATION';
-            bannerTitle.textContent = node.title;
-            bannerCategory.textContent = `in ${node.category}`;
-            if (bannerJumpBtn) {
-              bannerJumpBtn.style.display = 'inline-flex';
-              bannerJumpBtn.innerHTML = `<span>Go to Station</span> →`;
-            }
-          }
-        }
       } else if (data.allCompleted) {
         currentRecommendedNode = null;
         nextPill.style.display = 'inline-flex';
@@ -211,18 +187,8 @@
         nextLabel.textContent = 'Status:';
         nextTitle.textContent = 'Completed 🎉';
         nextPill.title = 'All stations in this section are completed!';
-
-        if (nextBanner) {
-          nextBanner.style.display = 'flex';
-          nextBanner.classList.add('all-completed');
-          bannerKicker.textContent = '🎉 ALL CAUGHT UP';
-          bannerTitle.textContent = 'All stations completed!';
-          bannerCategory.textContent = 'Great work! All stations in this section are marked done.';
-          if (bannerJumpBtn) bannerJumpBtn.style.display = 'none';
-        }
       } else {
         nextPill.style.display = 'none';
-        if (nextBanner) nextBanner.style.display = 'none';
         currentRecommendedNode = null;
       }
     } catch (e) {
@@ -1114,7 +1080,6 @@
     const btnToggle = document.getElementById('btn-toggle-view');
     const graphStage = document.getElementById('graph-stage');
     const fullGraphStage = document.getElementById('full-graph-stage');
-    const nextBanner = document.getElementById('next-node-banner');
 
     if (isFullGraphMode) {
       if (btnToggle) {
@@ -1123,7 +1088,6 @@
         btnToggle.title = 'Return to Focused Stage View';
       }
       if (graphStage) graphStage.style.display = 'none';
-      if (nextBanner) nextBanner.style.display = 'none';
       if (fullGraphStage) fullGraphStage.style.display = 'flex';
 
       loadAndRenderFullGraph(true);
@@ -1565,15 +1529,6 @@
           } else {
             openMarkdownModal(currentRecommendedNode.relPath, 'info');
           }
-        }
-      };
-    }
-
-    const btnNextBannerJump = document.getElementById('btn-next-banner-jump');
-    if (btnNextBannerJump) {
-      btnNextBannerJump.onclick = () => {
-        if (currentRecommendedNode && currentRecommendedNode.relPath !== getCurrentRelPath()) {
-          navigateToNode(currentRecommendedNode.relPath, currentRecommendedNode.breadcrumbs);
         }
       };
     }
