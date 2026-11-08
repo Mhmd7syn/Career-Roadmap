@@ -1495,6 +1495,293 @@ body {
 }
 
 /* ==========================================================================
+   Full Graph Overview Header Toggle Button
+   ========================================================================== */
+.btn-header-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-header-view-toggle:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.btn-header-view-toggle.active {
+  background: rgba(56, 139, 253, 0.18);
+  border-color: var(--accent-blue);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(56, 139, 253, 0.35);
+}
+
+.view-toggle-icon {
+  font-size: 0.85rem;
+}
+
+/* ==========================================================================
+   Full Graph Overview Stage
+   ========================================================================== */
+.full-graph-stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at 50% 50%, rgba(56, 139, 253, 0.03) 0%, transparent 70%),
+              var(--bg-primary);
+  z-index: 40;
+  overflow: hidden;
+}
+
+.full-graph-toolbar {
+  position: absolute;
+  top: 14px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  z-index: 45;
+  pointer-events: none;
+}
+
+.full-graph-legend,
+.full-graph-controls {
+  pointer-events: auto;
+  background: rgba(22, 27, 34, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-dot.status-completed {
+  background-color: var(--accent-green-text);
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.5);
+}
+
+.legend-dot.status-in-progress {
+  background-color: var(--accent-yellow);
+  box-shadow: 0 0 6px rgba(210, 153, 34, 0.5);
+}
+
+.legend-dot.status-todo {
+  background-color: var(--border);
+  border: 1px solid var(--text-muted);
+}
+
+.legend-symbol {
+  font-size: 0.8rem;
+  color: var(--accent-purple);
+  font-weight: 700;
+}
+
+.btn-fg-tool {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-fg-tool:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-blue);
+  color: #fff;
+}
+
+.btn-fg-tool.btn-fg-close {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: rgba(248, 81, 73, 0.4);
+  color: #f85149;
+}
+
+.btn-fg-tool.btn-fg-close:hover {
+  background: rgba(248, 81, 73, 0.3);
+  border-color: #f85149;
+}
+
+.full-graph-viewport {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.full-graph-viewport.is-panning {
+  cursor: grabbing;
+}
+
+.full-graph-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.full-graph-footer-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(22, 27, 34, 0.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(48, 54, 61, 0.7);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  pointer-events: none;
+  z-index: 45;
+}
+
+/* Full Graph SVG Elements */
+.fg-edge {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.6px;
+  stroke-linecap: round;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease, opacity 0.2s ease;
+}
+
+.fg-edge.status-completed {
+  stroke: var(--accent-green-text);
+  opacity: 0.7;
+}
+
+.fg-edge.status-in-progress {
+  stroke: var(--accent-yellow);
+  opacity: 0.8;
+}
+
+.fg-edge.highlight {
+  stroke: var(--accent-blue) !important;
+  stroke-width: 2.6px !important;
+  opacity: 1 !important;
+}
+
+.fg-node {
+  cursor: pointer;
+}
+
+.fg-node-card {
+  fill: var(--bg-secondary);
+  stroke: var(--border);
+  stroke-width: 1.2px;
+  transition: all 0.15s ease;
+}
+
+.fg-node:hover .fg-node-card {
+  fill: var(--bg-card);
+  stroke: var(--accent-blue);
+  stroke-width: 1.8px;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+}
+
+.fg-node.is-root .fg-node-card {
+  fill: #161f30;
+  stroke: var(--accent-blue);
+  stroke-width: 1.6px;
+}
+
+.fg-node.is-current .fg-node-card {
+  stroke: var(--accent-blue) !important;
+  stroke-width: 2.2px !important;
+  filter: drop-shadow(0 0 10px rgba(56, 139, 253, 0.6)) !important;
+}
+
+.fg-status-dot {
+  transition: r 0.15s ease;
+}
+
+.fg-status-dot.completed {
+  fill: var(--accent-green-text);
+}
+
+.fg-status-dot.in-progress {
+  fill: var(--accent-yellow);
+}
+
+.fg-status-dot.todo {
+  fill: #484f58;
+}
+
+.fg-node-title {
+  fill: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+}
+
+.fg-node.is-root .fg-node-title {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.fg-node-badge {
+  fill: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+}
+
+.fg-hub-indicator {
+  fill: var(--accent-purple);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.fg-current-indicator {
+  fill: var(--accent-blue);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+/* ==========================================================================
    Responsive Adaptations
    ========================================================================== */
 @media (max-width: 768px) {

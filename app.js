@@ -44,6 +44,9 @@
   }
 
   function navigateToNode(relPath, breadcrumbs = null) {
+    if (isFullGraphMode) {
+      toggleFullGraphMode(false);
+    }
     if (breadcrumbs && Array.isArray(breadcrumbs) && breadcrumbs.length > 0) {
       historyStack = breadcrumbs.map(b => ({
         id: b.id,
@@ -137,6 +140,7 @@
         }
         updateProgressStats();
         updateNextNodeRecommendation(relPath);
+        fullGraphTreeData = null;
       }
     } catch (err) {
       console.warn('Failed to save status to disk:', err);
@@ -818,6 +822,7 @@
 
       if (res.ok) {
         closeAddChildModal();
+        fullGraphTreeData = null;
         await loadNodeOnDemand(parentRel, true, 'forward');
         updateProgressStats();
       } else {
@@ -1086,11 +1091,385 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 10. Event Listeners & Bootstrapping
+  // 10. Full Graph Overview Mode
+  // ---------------------------------------------------------------------------
+
+  let isFullGraphMode = false;
+  let fullGraphTreeData = null;
+  let fgPanX = 0;
+  let fgPanY = 0;
+  let fgScale = 1;
+  let fgIsDragging = false;
+  let fgDragStartX = 0;
+  let fgDragStartY = 0;
+  let fgLayoutNodes = [];
+  let fgLayoutEdges = [];
+
+  function toggleFullGraphMode(forceState = null) {
+    const nextState = forceState !== null ? forceState : !isFullGraphMode;
+    if (nextState === isFullGraphMode) return;
+
+    isFullGraphMode = nextState;
+
+    const btnToggle = document.getElementById('btn-toggle-view');
+    const graphStage = document.getElementById('graph-stage');
+    const fullGraphStage = document.getElementById('full-graph-stage');
+    const nextBanner = document.getElementById('next-node-banner');
+
+    if (isFullGraphMode) {
+      if (btnToggle) {
+        btnToggle.classList.add('active');
+        btnToggle.innerHTML = '<span class="view-toggle-icon">🎯</span><span class="view-toggle-label">Focused View</span>';
+        btnToggle.title = 'Return to Focused Stage View';
+      }
+      if (graphStage) graphStage.style.display = 'none';
+      if (nextBanner) nextBanner.style.display = 'none';
+      if (fullGraphStage) fullGraphStage.style.display = 'flex';
+
+      loadAndRenderFullGraph(true);
+    } else {
+      if (btnToggle) {
+        btnToggle.classList.remove('active');
+        btnToggle.innerHTML = '<span class="view-toggle-icon">🌐</span><span class="view-toggle-label">Full Graph</span>';
+        btnToggle.title = 'Toggle Full Graph Overview Mode';
+      }
+      if (fullGraphStage) fullGraphStage.style.display = 'none';
+      if (graphStage) graphStage.style.display = 'flex';
+      renderCurrentView();
+      requestAnimationFrame(drawConnectorLines);
+      if (currentRecommendedNode) {
+        updateNextNodeRecommendation(getCurrentRelPath());
+      }
+    }
+  }
+
+  async function loadAndRenderFullGraph(recomputeFit = false) {
+    try {
+      const res = await fetch('/api/full-graph', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        fullGraphTreeData = data.tree;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch full graph hierarchy:', err);
+    }
+
+    if (!fullGraphTreeData) return;
+
+    computeTreeLayout(fullGraphTreeData);
+    renderFullGraphSvg(fullGraphTreeData);
+
+    if (recomputeFit) {
+      requestAnimationFrame(() => fitFullGraphToViewport());
+    } else {
+      updateFullGraphTransform();
+    }
+  }
+
+  function computeTreeLayout(root) {
+    fgLayoutNodes = [];
+    fgLayoutEdges = [];
+
+    const CARD_WIDTH = 190;
+    const CARD_HEIGHT = 42;
+    const ROOT_WIDTH = 170;
+    const ROOT_HEIGHT = 46;
+    const GAP_X = 75;
+    const GAP_Y = 16;
+
+    // 1. Post-order traversal: compute subtree heights
+    function calcHeight(node) {
+      const children = node.children || [];
+      if (children.length === 0) {
+        node._h = CARD_HEIGHT + GAP_Y;
+        return node._h;
+      }
+      let sum = 0;
+      for (const child of children) {
+        sum += calcHeight(child);
+      }
+      node._h = Math.max(CARD_HEIGHT + GAP_Y, sum);
+      return node._h;
+    }
+
+    calcHeight(root);
+
+    // 2. Pre-order traversal: assign (x, y) coordinates
+    function assignPositions(node, depth, yStart, parent) {
+      const isRoot = depth === 0;
+      const w = isRoot ? ROOT_WIDTH : CARD_WIDTH;
+      const h = isRoot ? ROOT_HEIGHT : CARD_HEIGHT;
+      const x = depth * (CARD_WIDTH + GAP_X) + 40;
+
+      const children = node.children || [];
+      let y;
+
+      if (children.length === 0) {
+        y = yStart + (node._h - h) / 2;
+      } else {
+        let currY = yStart;
+        for (const child of children) {
+          assignPositions(child, depth + 1, currY, node);
+          currY += child._h;
+        }
+        const firstY = children[0]._y;
+        const lastY = children[children.length - 1]._y;
+        y = (firstY + lastY) / 2;
+      }
+
+      node._x = x;
+      node._y = y;
+      node._w = w;
+      node._hActual = h;
+      node._depth = depth;
+      node._parent = parent;
+
+      fgLayoutNodes.push(node);
+
+      if (parent) {
+        fgLayoutEdges.push({
+          from: parent,
+          to: node,
+          status: node.status || 'todo'
+        });
+      }
+    }
+
+    assignPositions(root, 0, 40, null);
+  }
+
+  function renderFullGraphSvg(root) {
+    const edgesGroup = document.getElementById('full-graph-edges');
+    const nodesGroup = document.getElementById('full-graph-nodes');
+    if (!edgesGroup || !nodesGroup) return;
+
+    edgesGroup.innerHTML = '';
+    nodesGroup.innerHTML = '';
+
+    const currentRel = getCurrentRelPath();
+
+    // 1. Render Bezier Connecting Edges
+    let edgesHtml = '';
+    fgLayoutEdges.forEach((edge, idx) => {
+      const x1 = edge.from._x + edge.from._w;
+      const y1 = edge.from._y + edge.from._hActual / 2;
+      const x2 = edge.to._x;
+      const y2 = edge.to._y + edge.to._hActual / 2;
+      const dx = x2 - x1;
+      const cx1 = x1 + dx * 0.5;
+      const cx2 = x2 - dx * 0.5;
+
+      const pathData = `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${cx1.toFixed(1)} ${y1.toFixed(1)}, ${cx2.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+      const edgeId = `fg-edge-${idx}`;
+
+      edgesHtml += `<path id="${edgeId}" class="fg-edge status-${edge.status}" data-from="${edge.from.relPath}" data-to="${edge.to.relPath}" d="${pathData}" />`;
+    });
+    edgesGroup.innerHTML = edgesHtml;
+
+    // 2. Render Node Cards
+    const frag = document.createDocumentFragment();
+
+    fgLayoutNodes.forEach((node) => {
+      const isRoot = node._depth === 0;
+      const isCurrent = (node.relPath === currentRel);
+      const hasChildren = node.hasChildren;
+      const status = node.status || 'todo';
+
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('class', `fg-node ${status} ${isRoot ? 'is-root' : ''} ${isCurrent ? 'is-current' : ''} ${hasChildren ? 'is-hub' : 'is-leaf'}`);
+      g.setAttribute('transform', `translate(${node._x.toFixed(1)}, ${node._y.toFixed(1)})`);
+      g.dataset.relpath = node.relPath;
+
+      // Truncate title if needed
+      const maxChars = hasChildren ? 14 : 17;
+      let displayTitle = node.title || (isRoot ? 'Knowledge Graph' : node.id);
+      if (displayTitle.length > maxChars) {
+        displayTitle = displayTitle.slice(0, maxChars - 1) + '…';
+      }
+
+      // Hub badge or Leaf badge
+      let badgeHtml = '';
+      if (hasChildren) {
+        badgeHtml = `<text class="fg-hub-indicator" x="${node._w - 12}" y="${node._hActual / 2 + 4}" text-anchor="end">⑂ ${node.childCount || ''}</text>`;
+      } else if (node.badge) {
+        let bText = node.badge;
+        if (bText.length > 8) bText = bText.slice(0, 7) + '…';
+        badgeHtml = `<text class="fg-node-badge" x="${node._w - 10}" y="${node._hActual / 2 + 3}" text-anchor="end">${escapeHtml(bText)}</text>`;
+      }
+
+      const activeIndicatorHtml = isCurrent
+        ? `<text class="fg-current-indicator" x="${node._w - (hasChildren ? 38 : 10)}" y="11" text-anchor="end">CURRENT</text>`
+        : '';
+
+      g.innerHTML = `
+        <title>${node.title}&#10;Path: ${node.relPath || 'Root'}&#10;Status: ${status}&#10;${hasChildren ? (node.childCount + ' sub-stations (' + (node.totalDescendants || 0) + ' total)') : 'Leaf Station'}</title>
+        <rect class="fg-node-card" width="${node._w}" height="${node._hActual}" rx="8" ry="8"></rect>
+        <circle class="fg-status-dot ${status}" cx="14" cy="${node._hActual / 2}" r="4"></circle>
+        <text class="fg-node-title" x="25" y="${node._hActual / 2 + 4}">${escapeHtml(displayTitle)}</text>
+        ${badgeHtml}
+        ${activeIndicatorHtml}
+      `;
+
+      // Hover: highlight connecting edges
+      g.onmouseenter = () => {
+        const relatedEdges = edgesGroup.querySelectorAll(`[data-from="${node.relPath}"], [data-to="${node.relPath}"]`);
+        relatedEdges.forEach(e => e.classList.add('highlight'));
+      };
+      g.onmouseleave = () => {
+        const highlighted = edgesGroup.querySelectorAll('.highlight');
+        highlighted.forEach(e => e.classList.remove('highlight'));
+      };
+
+      // Click: jump to station in focused stage
+      g.onclick = (e) => {
+        e.stopPropagation();
+        navigateToNode(node.relPath);
+        toggleFullGraphMode(false);
+      };
+
+      frag.appendChild(g);
+    });
+
+    nodesGroup.appendChild(frag);
+  }
+
+  function updateFullGraphTransform() {
+    const canvas = document.getElementById('full-graph-canvas');
+    if (canvas) {
+      canvas.setAttribute('transform', `translate(${fgPanX.toFixed(1)}, ${fgPanY.toFixed(1)}) scale(${fgScale.toFixed(3)})`);
+    }
+  }
+
+  function fitFullGraphToViewport() {
+    const viewport = document.getElementById('full-graph-viewport');
+    if (!viewport || fgLayoutNodes.length === 0) return;
+
+    const vWidth = viewport.clientWidth || window.innerWidth;
+    const vHeight = viewport.clientHeight || (window.innerHeight - 48);
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    fgLayoutNodes.forEach(node => {
+      if (node._x < minX) minX = node._x;
+      if (node._y < minY) minY = node._y;
+      if (node._x + node._w > maxX) maxX = node._x + node._w;
+      if (node._y + node._hActual > maxY) maxY = node._y + node._hActual;
+    });
+
+    const graphWidth = maxX - minX + 80;
+    const graphHeight = maxY - minY + 80;
+
+    const scaleX = (vWidth - 80) / graphWidth;
+    const scaleY = (vHeight - 80) / graphHeight;
+    let s = Math.min(scaleX, scaleY, 1.0);
+    s = Math.max(0.2, Math.min(s, 1.2));
+
+    fgScale = s;
+    fgPanX = (vWidth - graphWidth * s) / 2 - minX * s + 40 * s;
+    fgPanY = (vHeight - graphHeight * s) / 2 - minY * s + 40 * s;
+
+    updateFullGraphTransform();
+  }
+
+  function zoomFullGraph(factor, centerX = null, centerY = null) {
+    const viewport = document.getElementById('full-graph-viewport');
+    if (!viewport) return;
+
+    const rect = viewport.getBoundingClientRect();
+    const cx = centerX !== null ? (centerX - rect.left) : (rect.width / 2);
+    const cy = centerY !== null ? (centerY - rect.top) : (rect.height / 2);
+
+    const oldScale = fgScale;
+    let newScale = oldScale * factor;
+    newScale = Math.max(0.15, Math.min(newScale, 2.8));
+
+    fgPanX = cx - (cx - fgPanX) * (newScale / oldScale);
+    fgPanY = cy - (cy - fgPanY) * (newScale / oldScale);
+    fgScale = newScale;
+
+    updateFullGraphTransform();
+  }
+
+  function setupFullGraphInteractions() {
+    const viewport = document.getElementById('full-graph-viewport');
+    if (!viewport) return;
+
+    // 1. Mouse Drag Panning
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      fgIsDragging = true;
+      fgDragStartX = e.clientX - fgPanX;
+      fgDragStartY = e.clientY - fgPanY;
+      viewport.classList.add('is-panning');
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!fgIsDragging) return;
+      fgPanX = e.clientX - fgDragStartX;
+      fgPanY = e.clientY - fgDragStartY;
+      updateFullGraphTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (fgIsDragging) {
+        fgIsDragging = false;
+        viewport.classList.remove('is-panning');
+      }
+    });
+
+    // 2. Mouse Wheel Zooming
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.12 : 0.89;
+      zoomFullGraph(factor, e.clientX, e.clientY);
+    }, { passive: false });
+
+    // 3. Toolbar Buttons
+    const btnZoomIn = document.getElementById('btn-fg-zoom-in');
+    if (btnZoomIn) btnZoomIn.onclick = () => zoomFullGraph(1.2);
+
+    const btnZoomOut = document.getElementById('btn-fg-zoom-out');
+    if (btnZoomOut) btnZoomOut.onclick = () => zoomFullGraph(1 / 1.2);
+
+    const btnReset = document.getElementById('btn-fg-reset');
+    if (btnReset) btnReset.onclick = () => fitFullGraphToViewport();
+
+    const btnClose = document.getElementById('btn-fg-close');
+    if (btnClose) btnClose.onclick = () => toggleFullGraphMode(false);
+
+    // 4. Header Toggle Button
+    const btnToggle = document.getElementById('btn-toggle-view');
+    if (btnToggle) btnToggle.onclick = () => toggleFullGraphMode();
+
+    // 5. Escape Key to Exit Full Graph
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isFullGraphMode) {
+        const mdOverlay = document.getElementById('markdown-modal-overlay');
+        const extraOverlay = document.getElementById('extra-files-modal-overlay');
+        const addOverlay = document.getElementById('add-child-modal-overlay');
+        const isModalOpen = (mdOverlay && mdOverlay.classList.contains('open')) ||
+                            (extraOverlay && extraOverlay.classList.contains('open')) ||
+                            (addOverlay && addOverlay.classList.contains('open'));
+        if (!isModalOpen) {
+          toggleFullGraphMode(false);
+        }
+      }
+    });
+
+    // 6. Window Resize
+    window.addEventListener('resize', () => {
+      if (isFullGraphMode) {
+        requestAnimationFrame(() => fitFullGraphToViewport());
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 11. Event Listeners & Bootstrapping
   // ---------------------------------------------------------------------------
 
   function setupEventListeners() {
     setupSearch();
+    setupFullGraphInteractions();
     const logo = document.getElementById('logo');
     if (logo) {
       logo.onclick = () => {

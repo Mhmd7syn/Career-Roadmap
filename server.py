@@ -228,6 +228,34 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             breadcrumbs.append({"id": part, "title": title, "relPath": c_rel})
         return breadcrumbs
 
+    def _scan_full_tree(self, folder: Path, depth: int = 0) -> dict:
+        """Recursively scan complete station hierarchy starting from folder."""
+        rel_path = folder.relative_to(GRAPH_DIR).as_posix() if folder != GRAPH_DIR else ""
+        default_title = folder.name.replace("-", " ").replace("_", " ").title() if rel_path else "Knowledge Graph"
+        info_file = folder / "info.md"
+        title, badge, status = self._parse_info_md(info_file, default_title)
+
+        children = []
+        if folder.exists() and folder.is_dir():
+            subdirs = [d for d in folder.iterdir() if d.is_dir() and not d.name.startswith((".", "__"))]
+            for d in sorted(subdirs, key=lambda x: x.name.lower()):
+                children.append(self._scan_full_tree(d, depth + 1))
+
+        total_descendants = len(children) + sum(c.get("totalDescendants", 0) for c in children)
+
+        return {
+            "id": folder.name if rel_path else "root",
+            "title": title,
+            "badge": badge,
+            "status": status,
+            "relPath": rel_path,
+            "depth": depth,
+            "hasChildren": len(children) > 0,
+            "childCount": len(children),
+            "totalDescendants": total_descendants,
+            "children": children
+        }
+
     def _find_next_node_bfs(self, start_dir: Path) -> dict:
         """
         BFS from start_dir returning the first uncompleted station:
@@ -506,7 +534,12 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._handle_api_search(parsed.query)
             return
 
-        # 3. API: Fallback graph
+        # 5. API: Full Graph Tree Hierarchy
+        if path == "/api/full-graph":
+            self._handle_api_get_full_graph()
+            return
+
+        # Fallback graph
         if path in ("/api/graph", "/api/graph/"):
             self._handle_api_get_root()
             return
@@ -590,6 +623,17 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 "total": total,
                 "count": len(results),
                 "results": results
+            })
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_api_get_full_graph(self):
+        """Fetch complete knowledge graph hierarchy for overview mode."""
+        try:
+            tree = self._scan_full_tree(GRAPH_DIR)
+            self._send_json(200, {
+                "status": "ok",
+                "tree": tree
             })
         except Exception as e:
             self._send_json(400, {"error": str(e)})

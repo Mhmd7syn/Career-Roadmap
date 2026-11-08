@@ -35,6 +35,12 @@
     </div>
 
     <div class="header-right">
+      <!-- Full Graph Overview Toggle -->
+      <button class="btn-header-view-toggle" id="btn-toggle-view" title="Toggle Full Graph Overview Mode">
+        <span class="view-toggle-icon">🌐</span>
+        <span class="view-toggle-label">Full Graph</span>
+      </button>
+
       <!-- Next Learning Node Recommendation Pill -->
       <button class="next-node-pill" id="next-node-pill" style="display: none;" title="Next station to learn">
         <span class="next-node-icon">🎯</span>
@@ -78,6 +84,34 @@
         <!-- Immediate Child Nodes Cluster with + Button as a child -->
         <div class="graph-children-anchor" id="graph-children-anchor"></div>
       </div>
+    </div>
+
+    <!-- Full Graph Overview Stage -->
+    <div class="full-graph-stage" id="full-graph-stage" style="display: none;">
+      <div class="full-graph-toolbar">
+        <div class="full-graph-legend">
+          <span class="legend-item"><span class="legend-dot status-completed"></span> Completed</span>
+          <span class="legend-item"><span class="legend-dot status-in-progress"></span> In Progress</span>
+          <span class="legend-item"><span class="legend-dot status-todo"></span> To Do</span>
+          <span class="legend-item"><span class="legend-symbol">⑂</span> Branch Hub</span>
+        </div>
+        <div class="full-graph-controls">
+          <button type="button" class="btn-fg-tool" id="btn-fg-zoom-in" title="Zoom In">+</button>
+          <button type="button" class="btn-fg-tool" id="btn-fg-zoom-out" title="Zoom Out">−</button>
+          <button type="button" class="btn-fg-tool" id="btn-fg-reset" title="Fit to Screen">Fit</button>
+          <button type="button" class="btn-fg-tool btn-fg-close" id="btn-fg-close" title="Return to Focused View">✕ Close</button>
+        </div>
+      </div>
+
+      <div class="full-graph-viewport" id="full-graph-viewport">
+        <svg class="full-graph-svg" id="full-graph-svg">
+          <g id="full-graph-canvas">
+            <g id="full-graph-edges"></g>
+            <g id="full-graph-nodes"></g>
+          </g>
+        </svg>
+      </div>
+      <div class="full-graph-footer-hint">Drag to pan · Scroll to zoom · Click any station to focus</div>
     </div>
   </main>
 
