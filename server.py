@@ -29,7 +29,7 @@ import threading
 BASE_DIR = Path(__file__).resolve().parent
 GRAPH_DIR = Path(os.getenv("GRAPH_DIR", BASE_DIR / "graph")).resolve()
 TEMPLATE_DIR = BASE_DIR / "graph.template"
-CORE_NODE_FILES = {"info.md", "notes.md"}
+CORE_NODE_FILES = {"info.md", "notes.md", "shortcut.json"}
 IGNORED_SYSTEM_FILES = {".DS_Store", "desktop.ini", "Thumbs.db"}
 
 
@@ -95,6 +95,47 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         raise PermissionError("Path traversal attempt detected")
 
+    def _resolve_shortcut(self, folder: Path, max_depth: int = 5) -> tuple[Path, bool, str]:
+        """
+        Check if folder contains shortcut.json. If so, follow target safely within GRAPH_DIR.
+        Returns: (canonical_folder, is_shortcut, canonical_rel_path)
+        """
+        curr = folder
+        is_shortcut = False
+        visited = {curr.resolve()}
+        canonical_rel = ""
+
+        for _ in range(max_depth):
+            shortcut_file = curr / "shortcut.json"
+            if not shortcut_file.exists():
+                break
+
+            try:
+                with open(shortcut_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                target_rel = data.get("target", "").strip()
+                if not target_rel:
+                    break
+
+                target_folder = self._resolve_graph_folder(target_rel)
+                if not target_folder.exists() or not target_folder.is_dir():
+                    break
+
+                resolved_target = target_folder.resolve()
+                if resolved_target in visited:
+                    print(f"[Warning]: Circular shortcut detected in {shortcut_file}", file=sys.stderr)
+                    break
+
+                visited.add(resolved_target)
+                curr = target_folder
+                is_shortcut = True
+                canonical_rel = curr.relative_to(GRAPH_DIR).as_posix() if curr != GRAPH_DIR else ""
+            except Exception as e:
+                print(f"[Error reading shortcut {shortcut_file}]: {e}", file=sys.stderr)
+                break
+
+        return curr, is_shortcut, canonical_rel
+
     def _parse_info_md(self, info_path: Path, default_title: str) -> tuple[str, str, str]:
         """Extract title, badge, and status from info.md."""
         title = default_title
@@ -138,38 +179,40 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         """
         Lightweight, non-recursive node scanner:
         Only scans the requested directory and its immediate child folder headers.
-        Decreases computation to O(1) folder reads per navigation.
+        Resolves shortcuts safely to canonical folder while preserving folder's own relPath.
         """
-        rel_path = folder.relative_to(GRAPH_DIR).as_posix()
-        if rel_path == ".":
-            rel_path = ""
+        rel_path = folder.relative_to(GRAPH_DIR).as_posix() if folder != GRAPH_DIR else ""
+        canonical_folder, is_shortcut, canonical_rel = self._resolve_shortcut(folder)
 
         default_title = folder.name.replace("-", " ").replace("_", " ").title() if rel_path else "Root"
-        info_file = folder / "info.md"
-        notes_file = folder / "notes.md"
+        info_file = canonical_folder / "info.md"
+        notes_file = canonical_folder / "notes.md"
 
         title, badge, status = self._parse_info_md(info_file, default_title)
 
-        # 1. Immediate subdirectories (non-recursive)
+        # 1. Immediate subdirectories from canonical folder
         children = []
-        if folder.exists() and folder.is_dir():
-            subdirs = [d for d in folder.iterdir() if d.is_dir() and not d.name.startswith((".", "__"))]
+        if canonical_folder.exists() and canonical_folder.is_dir():
+            subdirs = [d for d in canonical_folder.iterdir() if d.is_dir() and not d.name.startswith((".", "__"))]
             for d in sorted(subdirs, key=lambda x: x.name.lower()):
-                c_title, c_badge, c_status = self._parse_info_md(d / "info.md", d.name.replace("-", " ").replace("_", " ").title())
-                has_subchildren = any(sd.is_dir() and not sd.name.startswith((".", "__")) for sd in d.iterdir()) if d.exists() else False
+                c_canonical, c_is_shortcut, c_target_rel = self._resolve_shortcut(d)
+                c_title, c_badge, c_status = self._parse_info_md(c_canonical / "info.md", d.name.replace("-", " ").replace("_", " ").title())
+                has_subchildren = any(sd.is_dir() and not sd.name.startswith((".", "__")) for sd in c_canonical.iterdir()) if c_canonical.exists() else False
                 children.append({
                     "id": d.name,
                     "title": c_title,
                     "badge": c_badge,
                     "status": c_status,
                     "hasChildren": has_subchildren,
+                    "isShortcut": c_is_shortcut,
+                    "canonicalRelPath": c_target_rel if c_is_shortcut else "",
                     "relPath": d.relative_to(GRAPH_DIR).as_posix()
                 })
 
-        # 2. Extra files in this folder only
+        # 2. Extra files in canonical folder
         extra_files = []
-        if folder.exists() and folder.is_dir():
-            for f in sorted(folder.iterdir(), key=lambda x: x.name.lower()):
+        if canonical_folder.exists() and canonical_folder.is_dir():
+            for f in sorted(canonical_folder.iterdir(), key=lambda x: x.name.lower()):
                 if f.is_file() and f.name not in CORE_NODE_FILES and f.name not in IGNORED_SYSTEM_FILES and not f.name.startswith("."):
                     rel_to_base = f.relative_to(BASE_DIR).as_posix()
                     extra_files.append({
@@ -179,7 +222,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                         "ext": f.suffix.lstrip(".").lower()
                     })
 
-        # Read info and notes content for this current node
+        # Read info and notes content from canonical folder
         info_content = ""
         if info_file.exists():
             try:
@@ -200,6 +243,8 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             "id": folder.name if rel_path else "root",
             "folderName": folder.name if rel_path else "root",
             "relPath": rel_path,
+            "isShortcut": is_shortcut,
+            "canonicalRelPath": canonical_rel if is_shortcut else rel_path,
             "title": title,
             "badge": badge,
             "status": status,
@@ -215,31 +260,47 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
     def _build_breadcrumbs(self, folder: Path) -> list[dict]:
         """Build breadcrumbs trail from Root to folder."""
         if folder == GRAPH_DIR or not folder.is_relative_to(GRAPH_DIR):
-            return [{"id": "root", "title": "Root", "relPath": ""}]
+            return [{"id": "root", "title": "Root", "relPath": "", "isShortcut": False}]
 
         rel = folder.relative_to(GRAPH_DIR)
-        breadcrumbs = [{"id": "root", "title": "Root", "relPath": ""}]
+        breadcrumbs = [{"id": "root", "title": "Root", "relPath": "", "isShortcut": False}]
         curr = GRAPH_DIR
         for part in rel.parts:
             curr = curr / part
-            info_file = curr / "info.md"
+            c_canonical, c_is_shortcut, _ = self._resolve_shortcut(curr)
+            info_file = c_canonical / "info.md"
             title, _, _ = self._parse_info_md(info_file, part.replace("-", " ").replace("_", " ").title())
             c_rel = curr.relative_to(GRAPH_DIR).as_posix()
-            breadcrumbs.append({"id": part, "title": title, "relPath": c_rel})
+            breadcrumbs.append({
+                "id": part,
+                "title": title,
+                "relPath": c_rel,
+                "isShortcut": c_is_shortcut
+            })
         return breadcrumbs
 
-    def _scan_full_tree(self, folder: Path, depth: int = 0) -> dict:
-        """Recursively scan complete station hierarchy starting from folder."""
+    def _scan_full_tree(self, folder: Path, depth: int = 0, visited_ancestors: set = None) -> dict:
+        """Recursively scan complete station hierarchy starting from folder, handling shortcuts and preventing cycles."""
+        if visited_ancestors is None:
+            visited_ancestors = set()
+
         rel_path = folder.relative_to(GRAPH_DIR).as_posix() if folder != GRAPH_DIR else ""
+        canonical_folder, is_shortcut, canonical_rel = self._resolve_shortcut(folder)
+
         default_title = folder.name.replace("-", " ").replace("_", " ").title() if rel_path else "Knowledge Graph"
-        info_file = folder / "info.md"
+        info_file = canonical_folder / "info.md"
         title, badge, status = self._parse_info_md(info_file, default_title)
 
         children = []
-        if folder.exists() and folder.is_dir():
-            subdirs = [d for d in folder.iterdir() if d.is_dir() and not d.name.startswith((".", "__"))]
-            for d in sorted(subdirs, key=lambda x: x.name.lower()):
-                children.append(self._scan_full_tree(d, depth + 1))
+        canonical_resolved = canonical_folder.resolve()
+
+        # Prevent circular cycles
+        if canonical_resolved not in visited_ancestors:
+            next_ancestors = visited_ancestors | {canonical_resolved}
+            if canonical_folder.exists() and canonical_folder.is_dir():
+                subdirs = [d for d in canonical_folder.iterdir() if d.is_dir() and not d.name.startswith((".", "__"))]
+                for d in sorted(subdirs, key=lambda x: x.name.lower()):
+                    children.append(self._scan_full_tree(d, depth + 1, next_ancestors))
 
         total_descendants = len(children) + sum(c.get("totalDescendants", 0) for c in children)
 
@@ -249,6 +310,8 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             "badge": badge,
             "status": status,
             "relPath": rel_path,
+            "isShortcut": is_shortcut,
+            "canonicalRelPath": canonical_rel if is_shortcut else rel_path,
             "depth": depth,
             "hasChildren": len(children) > 0,
             "childCount": len(children),
@@ -263,6 +326,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         - Otherwise, traverse descendants in BFS order (level by level, alphabetical)
           and return the first station with status != 'completed'.
         - If all descendants are completed, indicate all completed.
+        - Resolves shortcuts and tracks visited canonical paths to avoid cycles.
         """
         if not start_dir.exists() or not start_dir.is_dir():
             return {
@@ -279,10 +343,11 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             subdirs = [p for p in d.iterdir() if p.is_dir() and not p.name.startswith((".", "__"))]
             return sorted(subdirs, key=lambda x: x.name.lower())
 
-        immediate_subdirs = get_subdirs(start_dir)
+        canonical_start, is_start_sc, start_target_rel = self._resolve_shortcut(start_dir)
+        immediate_subdirs = get_subdirs(canonical_start)
 
         # 1. Scoped context: Check the current node first (Root or any station)
-        info_file = start_dir / "info.md"
+        info_file = canonical_start / "info.md"
         default_title = start_dir.name.replace("-", " ").replace("_", " ").title() if start_dir != GRAPH_DIR else "Root"
         title, badge, status = self._parse_info_md(info_file, default_title)
 
@@ -299,6 +364,8 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     "title": title,
                     "badge": badge,
                     "status": status,
+                    "isShortcut": is_start_sc,
+                    "canonicalRelPath": start_target_rel if is_start_sc else rel_p,
                     "relPath": rel_p,
                     "category": category,
                     "breadcrumbs": breadcrumbs
@@ -306,11 +373,18 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             }
 
         # 2. BFS queue over descendants (if current node is completed)
+        visited_canonical = {canonical_start.resolve()}
         queue = deque(immediate_subdirs)
 
         while queue:
             curr = queue.popleft()
-            info_file = curr / "info.md"
+            canonical_curr, is_sc, target_rel = self._resolve_shortcut(curr)
+            resolved_canon = canonical_curr.resolve()
+            if resolved_canon in visited_canonical:
+                continue
+            visited_canonical.add(resolved_canon)
+
+            info_file = canonical_curr / "info.md"
             title, badge, status = self._parse_info_md(info_file, curr.name.replace("-", " ").replace("_", " ").title())
 
             if status != "completed":
@@ -326,6 +400,8 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                         "title": title,
                         "badge": badge,
                         "status": status,
+                        "isShortcut": is_sc,
+                        "canonicalRelPath": target_rel if is_sc else curr_rel,
                         "relPath": curr_rel,
                         "category": category,
                         "breadcrumbs": breadcrumbs
@@ -333,7 +409,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 }
 
             # Enqueue children for next BFS level
-            queue.extend(get_subdirs(curr))
+            queue.extend(get_subdirs(canonical_curr))
 
         return {
             "found": False,
@@ -380,8 +456,9 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 rel_path = ""
 
             default_title = folder.name.replace("-", " ").replace("_", " ").title() if rel_path else "Root"
-            info_file = folder / "info.md"
-            notes_file = folder / "notes.md"
+            canonical_folder, is_shortcut, canonical_rel = self._resolve_shortcut(folder)
+            info_file = canonical_folder / "info.md"
+            notes_file = canonical_folder / "notes.md"
 
             title, badge, status = self._parse_info_md(info_file, default_title)
             breadcrumbs = self._build_breadcrumbs(folder)
@@ -466,6 +543,8 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     "id": folder.name if rel_path else "root",
                     "title": title,
                     "relPath": rel_path,
+                    "isShortcut": is_shortcut,
+                    "canonicalRelPath": canonical_rel if is_shortcut else rel_path,
                     "status": status,
                     "badge": badge,
                     "category": category,
@@ -541,6 +620,11 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._handle_api_get_full_graph()
             return
 
+        # 6. API: Flat Canonical Stations List for Shortcut Selection
+        if path == "/api/stations":
+            self._handle_api_get_stations()
+            return
+
         # Fallback graph
         if path in ("/api/graph", "/api/graph/"):
             self._handle_api_get_root()
@@ -572,15 +656,20 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": str(e)})
 
     def _handle_api_get_stats(self):
-        """Lightweight overall progress computation."""
-        total = 0
+        """Lightweight overall progress computation across unique canonical stations."""
+        visited_canonical = set()
         completed = 0
         for root, dirs, files in os.walk(GRAPH_DIR):
             rpath = Path(root)
             if rpath == GRAPH_DIR or rpath.name.startswith((".", "__")):
                 continue
-            total += 1
-            info_file = rpath / "info.md"
+            canonical_path, _, _ = self._resolve_shortcut(rpath)
+            res = canonical_path.resolve()
+            if res in visited_canonical:
+                continue
+            visited_canonical.add(res)
+
+            info_file = canonical_path / "info.md"
             if info_file.exists():
                 try:
                     with open(info_file, "r", encoding="utf-8") as f:
@@ -592,12 +681,31 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 except Exception:
                     pass
 
+        total = len(visited_canonical)
         percent = round((completed / total) * 100) if total > 0 else 0
         self._send_json(200, {
             "total": total,
             "completed": completed,
             "percent": percent
         })
+
+    def _handle_api_get_stations(self):
+        """Return flat list of all canonical stations for shortcut selection."""
+        stations = []
+        for root, dirs, files in os.walk(GRAPH_DIR):
+            rpath = Path(root)
+            if rpath == GRAPH_DIR or rpath.name.startswith((".", "__")):
+                continue
+            if (rpath / "shortcut.json").exists():
+                continue
+            rel = rpath.relative_to(GRAPH_DIR).as_posix()
+            title, _, _ = self._parse_info_md(rpath / "info.md", rpath.name.replace("-", " ").replace("_", " ").title())
+            stations.append({
+                "title": title,
+                "relPath": rel
+            })
+        stations.sort(key=lambda s: s["title"].lower())
+        self._send_json(200, {"stations": stations})
 
     def _handle_api_get_next_node(self, query_string: str):
         """Find the next uncompleted station using BFS from the requested node."""
@@ -672,8 +780,9 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         try:
             node_dir = self._resolve_graph_folder(raw_path)
-            node_dir.mkdir(parents=True, exist_ok=True)
-            info_file = node_dir / "info.md"
+            canonical_dir, _, _ = self._resolve_shortcut(node_dir)
+            canonical_dir.mkdir(parents=True, exist_ok=True)
+            info_file = canonical_dir / "info.md"
 
             with open(info_file, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -693,8 +802,9 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         try:
             node_dir = self._resolve_graph_folder(raw_path)
-            node_dir.mkdir(parents=True, exist_ok=True)
-            notes_file = node_dir / "notes.md"
+            canonical_dir, _, _ = self._resolve_shortcut(node_dir)
+            canonical_dir.mkdir(parents=True, exist_ok=True)
+            notes_file = canonical_dir / "notes.md"
 
             with open(notes_file, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -714,7 +824,8 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         try:
             node_dir = self._resolve_graph_folder(raw_path)
-            info_file = node_dir / "info.md"
+            canonical_dir, _, _ = self._resolve_shortcut(node_dir)
+            info_file = canonical_dir / "info.md"
 
             self._update_status_in_info_md(info_file, status)
             print(f"[Status Saved in info.md]: {info_file} -> {status}")
@@ -728,20 +839,11 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": str(e)})
 
     def _handle_add_child(self, payload: dict):
-        """Create child folder with strictly info.md and notes.md using only name."""
+        """Create child folder with either fresh station or shortcut pointer."""
         parent_path = payload.get("parentPath", "")
+        is_shortcut = bool(payload.get("isShortcut", False))
+        target_path = payload.get("targetPath", "").strip()
         name = payload.get("name", payload.get("title", "")).strip()
-
-        if not name:
-            self._send_json(400, {"error": "Station name is required"})
-            return
-
-        child_id = "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-")
-        safe_child_id = "".join(c for c in child_id if c.isalnum() or c in ("-", "_")).strip("-")
-
-        if not safe_child_id:
-            self._send_json(400, {"error": "Name must contain alphanumeric characters"})
-            return
 
         try:
             parent_dir = self._resolve_graph_folder(parent_path)
@@ -749,7 +851,69 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json(404, {"error": f"Parent node folder not found at {parent_path}"})
                 return
 
-            child_dir = parent_dir / safe_child_id
+            canonical_parent, _, _ = self._resolve_shortcut(parent_dir)
+
+            if is_shortcut:
+                if not target_path:
+                    self._send_json(400, {"error": "Target station path is required for shortcut"})
+                    return
+
+                target_dir = self._resolve_graph_folder(target_path)
+                if not target_dir.exists() or not target_dir.is_dir():
+                    self._send_json(404, {"error": f"Target station not found at '{target_path}'"})
+                    return
+
+                canonical_target, _, _ = self._resolve_shortcut(target_dir)
+                if canonical_target.resolve() == canonical_parent.resolve():
+                    self._send_json(400, {"error": "Cannot create shortcut pointing to the parent station itself"})
+                    return
+
+                if not name:
+                    name = target_dir.name
+
+                child_id = "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-")
+                safe_child_id = "".join(c for c in child_id if c.isalnum() or c in ("-", "_")).strip("-")
+                if not safe_child_id:
+                    safe_child_id = target_dir.name
+
+                child_dir = canonical_parent / safe_child_id
+                if child_dir.exists():
+                    self._send_json(400, {"error": f"Station or shortcut named '{safe_child_id}' already exists here"})
+                    return
+
+                child_dir.mkdir(parents=True, exist_ok=True)
+                canonical_target_rel = canonical_target.relative_to(GRAPH_DIR).as_posix() if canonical_target != GRAPH_DIR else ""
+                shortcut_data = {
+                    "target": canonical_target_rel
+                }
+                with open(child_dir / "shortcut.json", "w", encoding="utf-8") as f:
+                    json.dump(shortcut_data, f, indent=2)
+
+                print(f"[Shortcut Created]: {child_dir} -> {canonical_target_rel}")
+                self._send_json(200, {
+                    "success": True,
+                    "message": f"Shortcut created pointing to {canonical_target_rel}",
+                    "node": self._scan_single_node(child_dir)
+                })
+                return
+
+            # Normal station creation
+            if not name:
+                self._send_json(400, {"error": "Station name is required"})
+                return
+
+            child_id = "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-")
+            safe_child_id = "".join(c for c in child_id if c.isalnum() or c in ("-", "_")).strip("-")
+
+            if not safe_child_id:
+                self._send_json(400, {"error": "Name must contain alphanumeric characters"})
+                return
+
+            child_dir = canonical_parent / safe_child_id
+            if child_dir.exists():
+                self._send_json(400, {"error": f"Station named '{safe_child_id}' already exists here"})
+                return
+
             child_dir.mkdir(parents=True, exist_ok=True)
 
             # 1. info.md
@@ -767,7 +931,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             with open(child_dir / "info.md", "w", encoding="utf-8") as f:
                 f.write(info_content)
 
-            # 2. notes.md (empty with only the title)
+            # 2. notes.md
             notes_content = f"# {name}\n\n"
             with open(child_dir / "notes.md", "w", encoding="utf-8") as f:
                 f.write(notes_content)
@@ -776,7 +940,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {
                 "success": True,
                 "message": f"Child station '{safe_child_id}' created",
-                "child": self._scan_single_node(child_dir)
+                "node": self._scan_single_node(child_dir)
             })
         except Exception as e:
             self._send_json(400, {"error": str(e)})
@@ -797,7 +961,8 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         try:
             node_dir = self._resolve_graph_folder(raw_path)
-            target_file = node_dir / safe_filename
+            canonical_dir, _, _ = self._resolve_shortcut(node_dir)
+            target_file = canonical_dir / safe_filename
 
             if "," in b64_content:
                 b64_content = b64_content.split(",", 1)[1]

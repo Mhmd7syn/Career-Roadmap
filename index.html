@@ -77,6 +77,7 @@
           <span class="legend-item"><span class="legend-dot status-in-progress"></span> In Progress</span>
           <span class="legend-item"><span class="legend-dot status-todo"></span> To Do</span>
           <span class="legend-item"><span class="legend-symbol">⑂</span> Branch Hub</span>
+          <span class="legend-item"><span class="legend-symbol" style="color: var(--accent-purple);">↗</span> Shortcut</span>
         </div>
         <div class="full-graph-controls">
           <button type="button" class="btn-fg-tool" id="btn-fg-zoom-in" title="Zoom In">+</button>
@@ -177,21 +178,38 @@
     </div>
   </div>
 
-  <!-- Modal: Add Child Node (Choose Name Only) -->
+  <!-- Modal: Add Child Node (Choose Name Only or Link Shortcut) -->
   <div class="modal-overlay" id="add-child-modal-overlay">
     <div class="modal-card modal-card-compact">
       <div class="modal-header">
         <div class="modal-title-group">
-          <h2 class="modal-title">➕ Add Child Node</h2>
+          <h2 class="modal-title" id="add-child-modal-title">➕ Add Child Station</h2>
           <span class="modal-parent-context" id="add-child-parent-label"></span>
         </div>
         <button class="modal-close" id="btn-close-add-child">&times;</button>
       </div>
 
+      <div class="add-child-type-selector">
+        <button type="button" class="btn-child-type active" id="btn-type-new-station">📁 New Station</button>
+        <button type="button" class="btn-child-type" id="btn-type-shortcut">↗ Link Shared Station</button>
+      </div>
+
       <form id="form-add-child" class="modal-form">
-        <div class="form-group">
-          <label class="form-label" for="new-child-name">Node Name <span class="required">*</span></label>
-          <input type="text" id="new-child-name" class="form-input" placeholder="Enter node name..." required autofocus autocomplete="off">
+        <!-- New Station Fields -->
+        <div class="form-group" id="group-new-station-name">
+          <label class="form-label" for="new-child-name">Station Name <span class="required">*</span></label>
+          <input type="text" id="new-child-name" class="form-input" placeholder="e.g. Docker, Linear Algebra..." required autofocus autocomplete="off">
+        </div>
+
+        <!-- Shortcut Selector Fields -->
+        <div class="form-group" id="group-shortcut-select" style="display: none;">
+          <label class="form-label" for="shortcut-target-select">Choose Existing Station <span class="required">*</span></label>
+          <select id="shortcut-target-select" class="form-input form-select">
+            <option value="">Loading stations...</option>
+          </select>
+          <span class="form-hint" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; display: block;">
+            Creates a lightweight alias pointer so this station appears here while maintaining its notes in one place.
+          </span>
         </div>
 
         <div class="modal-footer">

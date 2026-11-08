@@ -320,6 +320,14 @@
 
     const currentStatus = currentNode.status || 'todo';
     const badgeText = currentNode.badge || '';
+    const isParentShortcut = currentNode.isShortcut || false;
+    const shortcutBadgeHtml = isParentShortcut
+      ? `<span class="badge-shortcut" title="Linked to ${currentNode.canonicalRelPath}">↗ Shared from ${currentNode.canonicalRelPath}</span>`
+      : '';
+    const shortcutJumpBtnHtml = (isParentShortcut && currentNode.canonicalRelPath && currentNode.canonicalRelPath !== currentNode.relPath)
+      ? `<button class="btn-graph-action btn-graph-shortcut-jump" id="btn-parent-shortcut-jump" title="Jump to canonical station location">↗ Canonical</button>`
+      : '';
+
     // Extra files badge & button visibility rule:
     // Only display the Extra Files button if extra files actually exist in this station's folder.
     const extraFilesCount = (currentNode.extraFiles && currentNode.extraFiles.length) || 0;
@@ -334,12 +342,14 @@
           <button class="btn-status-cycle status-${currentStatus}" id="btn-status-toggle" title="Cycle status: To Do → In Progress → Done">
             ${currentStatus === 'completed' ? '● Done' : (currentStatus === 'in-progress' ? '◐ In Progress' : '○ To Do')}
           </button>
+          ${shortcutBadgeHtml}
           ${badgeText ? `<span style="font-size: 0.72rem; color: var(--accent-blue); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">${badgeText}</span>` : ''}
         </div>
         <div class="graph-parent-title">${currentNode.title}</div>
         <div class="graph-parent-actions">
           <button class="btn-graph-action btn-graph-info" id="btn-parent-info" title="View & edit info.md">ℹ️ Info</button>
           <button class="btn-graph-action btn-graph-notes" id="btn-parent-notes" title="View & edit notes.md">📝 Notes</button>
+          ${shortcutJumpBtnHtml}
           ${extraFilesBtnHtml}
         </div>
       </div>
@@ -359,6 +369,13 @@
       openMarkdownModal(currentNode.relPath, 'notes');
     };
 
+    const btnJumpCanonical = document.getElementById('btn-parent-shortcut-jump');
+    if (btnJumpCanonical) {
+      btnJumpCanonical.onclick = () => {
+        navigateToNode(currentNode.canonicalRelPath);
+      };
+    }
+
     const btnFiles = document.getElementById('btn-parent-extra-files');
     if (btnFiles) {
       btnFiles.onclick = () => openExtraFilesModal(currentNode);
@@ -372,9 +389,11 @@
     children.forEach((child, index) => {
       const childStatus = child.status || 'todo';
       const branchBadge = child.hasChildren ? '<span class="child-branch-indicator" title="Contains sub-stations">⑂</span>' : '';
+      const isChildShortcut = child.isShortcut || false;
+      const shortcutIndicator = isChildShortcut ? `<span class="child-shortcut-indicator" title="Shortcut to ${child.canonicalRelPath || child.title}">↗</span>` : '';
 
       const nodeEl = document.createElement('div');
-      nodeEl.className = `graph-child-node ${direction === 'forward' ? 'spawning' : ''}`;
+      nodeEl.className = `graph-child-node ${isChildShortcut ? 'is-shortcut' : ''} ${direction === 'forward' ? 'spawning' : ''}`;
       nodeEl.dataset.status = childStatus;
       nodeEl.dataset.id = child.id;
 
@@ -384,6 +403,7 @@
         <span class="child-status-dot ${dotClass}"></span>
         <span class="child-index">${String(index + 1).padStart(2, '0')}</span>
         <span class="child-node-title" title="${child.title}">${child.title}</span>
+        ${shortcutIndicator}
         ${branchBadge}
         <button class="btn-child-quick-info" title="Quick view info.md">ℹ️</button>
       `;
@@ -742,7 +762,9 @@
   // 8. Add Child Station Modal
   // ---------------------------------------------------------------------------
 
-  function openAddChildModal(parentRelPath) {
+  let activeAddChildType = 'new'; // 'new' | 'shortcut'
+
+  async function openAddChildModal(parentRelPath) {
     targetAddChildParentId = parentRelPath !== undefined ? parentRelPath : getCurrentRelPath();
     const parentTitle = currentNode ? currentNode.title : '';
 
@@ -750,12 +772,62 @@
 
     const nameInput = document.getElementById('new-child-name');
     const statusEl = document.getElementById('add-child-status');
+    const shortcutSelect = document.getElementById('shortcut-target-select');
 
     nameInput.value = '';
     statusEl.textContent = '';
+    switchAddChildType('new');
+
+    // Populate existing stations dropdown
+    if (shortcutSelect) {
+      shortcutSelect.innerHTML = '<option value="">Loading stations...</option>';
+      try {
+        const res = await fetch('/api/stations');
+        if (res.ok) {
+          const data = await res.json();
+          const stations = data.stations || [];
+          shortcutSelect.innerHTML = '<option value="">-- Select an existing station --</option>' +
+            stations
+              .filter(s => s.relPath !== targetAddChildParentId)
+              .map(s => `<option value="${escapeHtml(s.relPath)}">${escapeHtml(s.title)} (${escapeHtml(s.relPath)})</option>`)
+              .join('');
+        }
+      } catch (err) {
+        shortcutSelect.innerHTML = '<option value="">Failed to load stations</option>';
+      }
+    }
 
     document.getElementById('add-child-modal-overlay').classList.add('open');
     setTimeout(() => nameInput.focus(), 60);
+  }
+
+  function switchAddChildType(type) {
+    activeAddChildType = type;
+    const btnNew = document.getElementById('btn-type-new-station');
+    const btnSc = document.getElementById('btn-type-shortcut');
+    const groupNew = document.getElementById('group-new-station-name');
+    const groupSc = document.getElementById('group-shortcut-select');
+    const nameInput = document.getElementById('new-child-name');
+    const submitBtn = document.getElementById('btn-submit-add-child');
+
+    if (type === 'shortcut') {
+      if (btnNew) btnNew.classList.remove('active');
+      if (btnSc) btnSc.classList.add('active');
+      if (groupNew) groupNew.style.display = 'none';
+      if (groupSc) groupSc.style.display = 'block';
+      if (nameInput) nameInput.removeAttribute('required');
+      if (submitBtn) submitBtn.textContent = 'Link Shortcut';
+    } else {
+      if (btnSc) btnSc.classList.remove('active');
+      if (btnNew) btnNew.classList.add('active');
+      if (groupSc) groupSc.style.display = 'none';
+      if (groupNew) groupNew.style.display = 'block';
+      if (nameInput) {
+        nameInput.setAttribute('required', 'required');
+        nameInput.focus();
+      }
+      if (submitBtn) submitBtn.textContent = 'Create Station';
+    }
   }
 
   function closeAddChildModal() {
@@ -764,24 +836,62 @@
 
   async function handleAddChildSubmit(e) {
     e.preventDefault();
-
-    const name = document.getElementById('new-child-name').value.trim();
     const statusEl = document.getElementById('add-child-status');
+    const parentRel = targetAddChildParentId;
 
+    if (activeAddChildType === 'shortcut') {
+      const selectEl = document.getElementById('shortcut-target-select');
+      const targetRel = selectEl ? selectEl.value : '';
+      if (!targetRel) {
+        statusEl.textContent = 'Please choose a target station to link';
+        return;
+      }
+      const selectedOptionText = selectEl.options[selectEl.selectedIndex].text;
+      const targetTitle = selectedOptionText.split(' (')[0] || '';
+
+      statusEl.textContent = 'Creating shortcut on disk...';
+      try {
+        const res = await fetch('/api/add-child', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parentPath: parentRel,
+            isShortcut: true,
+            targetPath: targetRel,
+            name: targetTitle
+          })
+        });
+
+        if (res.ok) {
+          closeAddChildModal();
+          fullGraphTreeData = null;
+          await loadNodeOnDemand(parentRel, true, 'forward');
+          updateProgressStats();
+        } else {
+          const err = await res.json();
+          statusEl.textContent = `Error: ${err.error || 'Failed to create shortcut'}`;
+        }
+      } catch (err) {
+        statusEl.textContent = 'Error contacting disk server';
+      }
+      return;
+    }
+
+    // Normal station creation
+    const name = document.getElementById('new-child-name').value.trim();
     if (!name) {
       statusEl.textContent = 'Please enter a station name';
       return;
     }
 
     statusEl.textContent = 'Creating station on disk...';
-    const parentRel = targetAddChildParentId;
-
     try {
       const res = await fetch('/api/add-child', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           parentPath: parentRel,
+          isShortcut: false,
           name: name
         })
       });
@@ -1236,24 +1346,27 @@
     fgLayoutNodes.forEach((node) => {
       const isRoot = node._depth === 0;
       const isCurrent = (node.relPath === currentRel);
+      const isShortcut = node.isShortcut || false;
       const hasChildren = node.hasChildren;
       const status = node.status || 'todo';
 
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      g.setAttribute('class', `fg-node ${status} ${isRoot ? 'is-root' : ''} ${isCurrent ? 'is-current' : ''} ${hasChildren ? 'is-hub' : 'is-leaf'}`);
+      g.setAttribute('class', `fg-node ${status} ${isRoot ? 'is-root' : ''} ${isCurrent ? 'is-current' : ''} ${isShortcut ? 'is-shortcut' : ''} ${hasChildren ? 'is-hub' : 'is-leaf'}`);
       g.setAttribute('transform', `translate(${node._x.toFixed(1)}, ${node._y.toFixed(1)})`);
       g.dataset.relpath = node.relPath;
 
       // Truncate title if needed
-      const maxChars = hasChildren ? 14 : 17;
+      const maxChars = isShortcut ? 12 : (hasChildren ? 14 : 17);
       let displayTitle = node.title || (isRoot ? 'Knowledge Graph' : node.id);
       if (displayTitle.length > maxChars) {
         displayTitle = displayTitle.slice(0, maxChars - 1) + '…';
       }
 
-      // Hub badge or Leaf badge
+      // Hub badge, Leaf badge, or Shortcut indicator
       let badgeHtml = '';
-      if (hasChildren) {
+      if (isShortcut) {
+        badgeHtml = `<text class="fg-shortcut-indicator" x="${node._w - 10}" y="${node._hActual / 2 + 4}" text-anchor="end" title="Shortcut to ${node.canonicalRelPath}">↗</text>`;
+      } else if (hasChildren) {
         badgeHtml = `<text class="fg-hub-indicator" x="${node._w - 12}" y="${node._hActual / 2 + 4}" text-anchor="end">⑂ ${node.childCount || ''}</text>`;
       } else if (node.badge) {
         let bText = node.badge;
@@ -1262,11 +1375,13 @@
       }
 
       const activeIndicatorHtml = isCurrent
-        ? `<text class="fg-current-indicator" x="${node._w - (hasChildren ? 38 : 10)}" y="11" text-anchor="end">CURRENT</text>`
+        ? `<text class="fg-current-indicator" x="${node._w - (hasChildren || isShortcut ? 38 : 10)}" y="11" text-anchor="end">CURRENT</text>`
         : '';
 
+      const tooltipText = `${node.title}\nPath: ${node.relPath || 'Root'}${isShortcut ? '\nShortcut to: ' + node.canonicalRelPath : ''}\nStatus: ${status}\n${hasChildren ? (node.childCount + ' sub-stations (' + (node.totalDescendants || 0) + ' total)') : 'Leaf Station'}`;
+
       g.innerHTML = `
-        <title>${node.title}&#10;Path: ${node.relPath || 'Root'}&#10;Status: ${status}&#10;${hasChildren ? (node.childCount + ' sub-stations (' + (node.totalDescendants || 0) + ' total)') : 'Leaf Station'}</title>
+        <title>${escapeHtml(tooltipText)}</title>
         <rect class="fg-node-card" width="${node._w}" height="${node._hActual}" rx="8" ry="8"></rect>
         <circle class="fg-status-dot ${status}" cx="14" cy="${node._hActual / 2}" r="4"></circle>
         <text class="fg-node-title" x="25" y="${node._hActual / 2 + 4}">${escapeHtml(displayTitle)}</text>
@@ -1503,6 +1618,12 @@
     if (fileInput) fileInput.onchange = handleExtraFileSelected;
 
     // Add Child Modal Controls
+    const btnTypeNew = document.getElementById('btn-type-new-station');
+    if (btnTypeNew) btnTypeNew.onclick = () => switchAddChildType('new');
+
+    const btnTypeSc = document.getElementById('btn-type-shortcut');
+    if (btnTypeSc) btnTypeSc.onclick = () => switchAddChildType('shortcut');
+
     const btnCloseAddChild = document.getElementById('btn-close-add-child');
     if (btnCloseAddChild) btnCloseAddChild.onclick = closeAddChildModal;
 

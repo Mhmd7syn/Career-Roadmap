@@ -667,6 +667,48 @@ body {
   background: rgba(63, 185, 80, 0.2);
 }
 
+.btn-graph-shortcut-jump {
+  color: var(--accent-purple);
+  border-color: rgba(163, 113, 247, 0.35);
+  background: rgba(163, 113, 247, 0.08);
+}
+
+.btn-graph-shortcut-jump:hover {
+  border-color: var(--accent-purple);
+  background: rgba(163, 113, 247, 0.2);
+}
+
+.badge-shortcut {
+  background: rgba(163, 113, 247, 0.15);
+  border: 1px solid rgba(163, 113, 247, 0.35);
+  color: var(--accent-purple);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.graph-child-node.is-shortcut {
+  border-style: dashed;
+  border-color: rgba(163, 113, 247, 0.45);
+}
+
+.graph-child-node.is-shortcut:hover {
+  border-color: var(--accent-purple);
+  box-shadow: 0 4px 16px rgba(163, 113, 247, 0.15);
+}
+
+.child-shortcut-indicator {
+  color: var(--accent-purple);
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-left: 2px;
+  line-height: 1;
+}
+
 /* ==========================================================================
    Immediate Child Stations Cluster
    ========================================================================== */
@@ -1679,6 +1721,66 @@ body {
   font-weight: 700;
   letter-spacing: 0.5px;
   pointer-events: none;
+}
+
+.fg-node.is-shortcut .fg-node-card {
+  stroke-dasharray: 4 2;
+  stroke: var(--accent-purple);
+}
+
+.fg-shortcut-indicator {
+  fill: var(--accent-purple);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Modal Shortcut & Type Selector */
+.add-child-type-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.btn-child-type {
+  flex: 1;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.btn-child-type:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-child-type.active {
+  background: rgba(56, 139, 253, 0.15);
+  border-color: var(--accent-blue);
+  color: #ffffff;
+}
+
+.form-select {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  width: 100%;
+  outline: none;
+  font-family: inherit;
+}
+
+.form-select:focus {
+  border-color: var(--accent-blue);
 }
 
 /* ==========================================================================
