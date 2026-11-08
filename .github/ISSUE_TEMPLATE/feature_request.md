@@ -13,7 +13,7 @@ A clear and concise description of the problem (e.g. "I find it difficult to..."
 A clear and concise description of what you want to happen.
 
 ### Architectural Alignment
-How does this feature align with the [Master System Rules](RULES.md) (e.g., Directory-as-Graph, zero external dependencies, offline first)?
+How does this feature align with the [System & Node Guidelines](AGENTS.md) (e.g., Directory-as-Graph, zero external dependencies, offline first)?
 
 ### Additional Context
 Add any other context, mockups, or screenshots about the feature request here.

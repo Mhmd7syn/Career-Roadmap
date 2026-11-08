@@ -75,13 +75,19 @@ git submodule add https://github.com/<your-username>/<your-private-repo>.git gra
 
 ---
 
-## Roadmap & Content Rules
+## Node Design & Content Guidelines
 
-The roadmap content and future node expansions are strictly governed by [`RULES.md`](RULES.md):
-1. **Starter Node Scoping:** Every station's `info.md` acts as a starter launching pad; child subfolders handle deep specializations.
-2. **High-Yield Sourcing:** Laser-focused resources prioritizing practice problems, quickstarts, and active recall (3–4 links max).
-3. **Clean Formatting & Separation:** Zero filler or decorative emojis; `info.md` stays concise while `notes.md` stores deep synthesis.
-4. **The 3-Pass Learning Engine:** Fast concept intake, interactive recall drills, and production synthesis before advancement.
+The roadmap content, progressive mastery structure, and station specifications follow strict design standards (automated agents should consult [`AGENTS.md`](AGENTS.md)):
+
+1. **Starter Node Scoping (Launchpad Only):** Every station's `info.md` provides only foundational orientation, core mental models, and initial setup. Advanced specializations, deep tooling, and detailed sub-disciplines belong strictly in child subfolders.
+2. **High-Yield Sourcing (3–4 Links Cap):** Strictly 3 to 4 links per station (e.g., 1 practice/sandbox, 1 quickstart/cheatsheet, 1 focused guide). Avoid encyclopedic link dumps; prioritize interactive platforms and active recall drills.
+3. **Clean Separation of Concerns:**
+   - `info.md`: Lightweight station metadata (`Status`), concise overview, actionable learning outcomes, self-check drills, and curated high-yield links.
+   - `notes.md`: Personal study notes, code implementations, architectural insights, and LaTeX formulas.
+4. **Node Anatomy Standard:** Every station natively enforces progressive mastery across three structured tiers:
+   - **Overview & Learning Outcomes:** Core mental models and 3–5 action-oriented learning targets.
+   - **Checkpoint Questions:** Active recall prompts formatted as Markdown checkboxes (`- [ ]`) to test retention from memory without looking at notes.
+   - **Lab / Project Target:** Practical application and problem-solving targets whose working derivation and solutions reside in `notes.md`.
 
 ---
 
@@ -95,7 +101,7 @@ Career-Roadmap/
 ├── style.css                # Dark-mode styling, typography, and controls
 ├── server.py                # Pure Python HTTP server & file-system API
 ├── run.bat                  # One-click Windows launch script
-├── RULES.md                 # System architecture rules and learning engine spec
+├── AGENTS.md                # AI agent instructions & node creation spec
 ├── graph.template/          # Starter sample roadmap stations and templates
 ├── libs/                    # Vendored offline assets (KaTeX, Marked.js)
 ├── requirements.txt         # Dependency documentation (zero external pip packages)
