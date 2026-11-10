@@ -1,9 +1,9 @@
 @echo off
-title Career Knowledge Graph Runner
+title Knowledge Graph Runner
 cd /d "%~dp0"
 
 echo ===================================================================
-echo  Career Knowledge Graph Runner (Python 3.14)
+echo  Knowledge Graph Runner (Python 3.14)
 echo  Local Canvas - Graph-as-Directory Platform
 echo ===================================================================
 

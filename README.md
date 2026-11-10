@@ -1,4 +1,4 @@
-# Knowledge Graph / Career Roadmap
+# Knowledge Graph
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
@@ -33,8 +33,8 @@ A lightweight, offline-first, **Directory-as-Graph** visual knowledge platform a
 
 ```bash
 # Clone the repository
-git clone https://github.com/Mhmd7syn/Career-Roadmap.git
-cd Career-Roadmap
+git clone https://github.com/Mhmd7syn/knowledge-graph.git
+cd knowledge-graph
 
 # Run the local server
 python server.py
@@ -94,7 +94,7 @@ The roadmap content, progressive mastery structure, and station specifications f
 ## Project Structure
 
 ```
-Career-Roadmap/
+knowledge-graph/
 ├── .github/                 # Issue & PR templates, CI workflows
 ├── app.js                   # Visual canvas engine, layout & UI transitions
 ├── index.html               # Canvas and modal presentation markup

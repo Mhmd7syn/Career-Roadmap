@@ -26,8 +26,8 @@ All contributors and participants are expected to adhere to our [Code of Conduct
 
 1. **Fork and Clone the Repository:**
    ```bash
-   git clone https://github.com/<your-username>/Career-Roadmap.git
-   cd Career-Roadmap
+   git clone https://github.com/<your-username>/knowledge-graph.git
+   cd knowledge-graph
    ```
 
 2. **Branching Strategy:**

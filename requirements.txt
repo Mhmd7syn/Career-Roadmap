@@ -1,3 +1,3 @@
-# Knowledge Graph / Career Roadmap
+# Knowledge Graph
 # Pure Python standard library - zero external pip dependencies required.
 # Requires Python 3.10+ (tested on Python 3.12 / 3.14).
