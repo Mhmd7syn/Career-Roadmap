@@ -348,6 +348,14 @@
       ? `<button class="btn-graph-action btn-graph-files" id="btn-parent-extra-files" title="View ${extraFilesCount} extra files">📁 Extra Files (${extraFilesCount})</button>`
       : '';
 
+    const isRoot = !currentNode.relPath || currentNode.relPath === 'root';
+    const stationMgmtButtonsHtml = !isRoot ? `
+      <button class="btn-graph-action btn-graph-rename" id="btn-parent-rename" title="Rename station title & slug">✏️ Rename</button>
+      <button class="btn-graph-action btn-graph-move" id="btn-parent-move" title="Move station to another parent hub">📁 Move</button>
+      <button class="btn-graph-action btn-graph-share" id="btn-parent-share" title="Create shortcut link in another hub">↗ Share</button>
+      <button class="btn-graph-action btn-graph-delete" id="btn-parent-delete" title="Delete station">🗑️ Delete</button>
+    ` : '';
+
     // 1. Render Parent Node Card
     parentAnchor.innerHTML = `
       <div class="graph-parent-card">
@@ -364,6 +372,7 @@
           <button class="btn-graph-action btn-graph-notes" id="btn-parent-notes" title="View & edit notes.md">📝 Notes</button>
           ${shortcutJumpBtnHtml}
           ${extraFilesBtnHtml}
+          ${stationMgmtButtonsHtml}
         </div>
       </div>
     `;
@@ -398,6 +407,18 @@
     if (btnFiles) {
       btnFiles.onclick = () => openExtraFilesModal(currentNode);
     }
+
+    const btnRename = document.getElementById('btn-parent-rename');
+    if (btnRename) btnRename.onclick = () => openRenameModal(currentNode.relPath);
+
+    const btnMove = document.getElementById('btn-parent-move');
+    if (btnMove) btnMove.onclick = () => openMoveModal(currentNode.relPath);
+
+    const btnShare = document.getElementById('btn-parent-share');
+    if (btnShare) btnShare.onclick = () => openShareModal(currentNode.relPath);
+
+    const btnDelete = document.getElementById('btn-parent-delete');
+    if (btnDelete) btnDelete.onclick = () => openDeleteModal(currentNode.relPath);
 
     // 2. Render Immediate Child Stations
     childrenAnchor.innerHTML = '';
@@ -510,6 +531,11 @@
     iconEl.textContent = docType === 'info' ? 'ℹ️' : '📝';
 
     updateDocSwitchTabs(docType);
+
+    const stationModalActions = document.getElementById('station-modal-actions');
+    if (stationModalActions) {
+      stationModalActions.style.display = relPath ? 'inline-flex' : 'none';
+    }
 
     let content = '';
     const cachedNode = nodeCache[relPath];
@@ -1000,7 +1026,419 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 8b. Consolidated Notes Extraction Modal (Pre-order DFS)
+  // 8b. Station Management Modals (Rename, Move, Share, Delete)
+  // ---------------------------------------------------------------------------
+
+  let targetStationActionRelPath = '';
+
+  function openRenameModal(relPath) {
+    if (!relPath) return;
+    targetStationActionRelPath = relPath;
+
+    const overlay = document.getElementById('rename-modal-overlay');
+    const contextEl = document.getElementById('rename-modal-context');
+    const titleInput = document.getElementById('rename-title-input');
+    const slugInput = document.getElementById('rename-slug-input');
+    const statusEl = document.getElementById('rename-modal-status');
+
+    statusEl.textContent = '';
+    contextEl.textContent = `Path: graph/${relPath}`;
+
+    let initialTitle = '';
+    const initialSlug = relPath.split('/').pop();
+
+    if (currentNode && currentNode.relPath === relPath) {
+      initialTitle = currentNode.title || '';
+    } else if (nodeCache[relPath]) {
+      initialTitle = nodeCache[relPath].title || '';
+    } else {
+      initialTitle = initialSlug.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    titleInput.value = initialTitle;
+    slugInput.value = initialSlug;
+
+    let slugManuallyEdited = false;
+    slugInput.oninput = () => {
+      slugManuallyEdited = true;
+    };
+    titleInput.oninput = () => {
+      if (!slugManuallyEdited) {
+        slugInput.value = titleInput.value.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      }
+    };
+
+    overlay.classList.add('open');
+    setTimeout(() => titleInput.focus(), 60);
+  }
+
+  function closeRenameModal() {
+    const overlay = document.getElementById('rename-modal-overlay');
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  async function handleRenameSubmit(e) {
+    e.preventDefault();
+    const statusEl = document.getElementById('rename-modal-status');
+    const title = document.getElementById('rename-title-input').value.trim();
+    const slug = document.getElementById('rename-slug-input').value.trim();
+
+    if (!title && !slug) {
+      statusEl.textContent = 'Please enter a valid title or slug';
+      return;
+    }
+
+    statusEl.textContent = 'Renaming station on disk...';
+    try {
+      const res = await fetch('/api/rename-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: targetStationActionRelPath,
+          newTitle: title,
+          newSlug: slug
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        closeRenameModal();
+        fullGraphTreeData = null;
+        nodeCache = {};
+
+        const oldRel = targetStationActionRelPath;
+        const newRel = data.newPath;
+
+        if (activeModalNodeRelPath === oldRel) {
+          activeModalNodeRelPath = newRel;
+          const pathEl = document.getElementById('md-modal-path');
+          if (pathEl) {
+            const filename = activeDocType === 'info' ? 'info.md' : 'notes.md';
+            pathEl.textContent = `graph/${newRel ? newRel + '/' : ''}${filename}`;
+          }
+        }
+
+        const currentRel = getCurrentRelPath();
+        if (currentRel === oldRel) {
+          await loadNodeOnDemand(newRel, false, 'none');
+        } else {
+          await loadNodeOnDemand(currentRel, false, 'none');
+        }
+        updateProgressStats();
+      } else {
+        statusEl.textContent = `Error: ${data.error || 'Failed to rename station'}`;
+      }
+    } catch (err) {
+      statusEl.textContent = 'Error contacting disk server';
+    }
+  }
+
+  async function openMoveModal(relPath) {
+    if (!relPath) return;
+    targetStationActionRelPath = relPath;
+
+    const overlay = document.getElementById('move-modal-overlay');
+    const contextEl = document.getElementById('move-modal-context');
+    const selectEl = document.getElementById('move-target-parent-select');
+    const statusEl = document.getElementById('move-modal-status');
+
+    statusEl.textContent = '';
+    const nodeTitle = (currentNode && currentNode.relPath === relPath)
+      ? currentNode.title
+      : (nodeCache[relPath] ? nodeCache[relPath].title : relPath.split('/').pop());
+
+    contextEl.textContent = `Moving: ${nodeTitle} (graph/${relPath})`;
+    selectEl.innerHTML = '<option value="">Loading destinations...</option>';
+
+    try {
+      const res = await fetch('/api/stations');
+      if (res.ok) {
+        const data = await res.json();
+        const stations = data.stations || [];
+
+        const parts = relPath.split('/');
+        parts.pop();
+        const currentParent = parts.join('/');
+
+        let optionsHtml = '';
+        if (currentParent !== '') {
+          optionsHtml += '<option value="">Root Hub (root)</option>';
+        }
+
+        const validStations = stations.filter(s => {
+          if (s.relPath === relPath) return false;
+          if (s.relPath.startsWith(relPath + '/')) return false;
+          if (s.relPath === currentParent) return false;
+          return true;
+        });
+
+        optionsHtml += validStations.map(s => {
+          return `<option value="${escapeHtml(s.relPath)}">${escapeHtml(s.title)} (${escapeHtml(s.relPath)})</option>`;
+        }).join('');
+
+        if (!optionsHtml) {
+          optionsHtml = '<option value="" disabled>No alternate destinations available</option>';
+        }
+
+        selectEl.innerHTML = optionsHtml;
+      }
+    } catch (e) {
+      selectEl.innerHTML = '<option value="">Failed to load destinations</option>';
+    }
+
+    overlay.classList.add('open');
+  }
+
+  function closeMoveModal() {
+    const overlay = document.getElementById('move-modal-overlay');
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  async function handleMoveSubmit(e) {
+    e.preventDefault();
+    const statusEl = document.getElementById('move-modal-status');
+    const selectEl = document.getElementById('move-target-parent-select');
+    const newParent = selectEl.value;
+
+    statusEl.textContent = 'Moving station on disk...';
+    try {
+      const res = await fetch('/api/move-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourcePath: targetStationActionRelPath,
+          newParentPath: newParent
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        closeMoveModal();
+        closeMarkdownModal();
+        fullGraphTreeData = null;
+        nodeCache = {};
+
+        await loadNodeOnDemand(data.newPath, false, 'forward');
+        updateProgressStats();
+      } else {
+        statusEl.textContent = `Error: ${data.error || 'Failed to move station'}`;
+      }
+    } catch (err) {
+      statusEl.textContent = 'Error contacting disk server';
+    }
+  }
+
+  async function openShareModal(relPath) {
+    if (!relPath) return;
+    targetStationActionRelPath = relPath;
+
+    const overlay = document.getElementById('share-modal-overlay');
+    const contextEl = document.getElementById('share-modal-context');
+    const selectEl = document.getElementById('share-target-parent-select');
+    const nameInput = document.getElementById('share-shortcut-name-input');
+    const statusEl = document.getElementById('share-modal-status');
+
+    statusEl.textContent = '';
+    const nodeTitle = (currentNode && currentNode.relPath === relPath)
+      ? currentNode.title
+      : (nodeCache[relPath] ? nodeCache[relPath].title : relPath.split('/').pop());
+
+    contextEl.textContent = `Sharing: ${nodeTitle} (graph/${relPath})`;
+    nameInput.value = nodeTitle;
+    selectEl.innerHTML = '<option value="">Loading destinations...</option>';
+
+    try {
+      const res = await fetch('/api/stations');
+      if (res.ok) {
+        const data = await res.json();
+        const stations = data.stations || [];
+
+        let optionsHtml = '<option value="">Root Hub (root)</option>';
+        optionsHtml += stations
+          .filter(s => s.relPath !== relPath)
+          .map(s => `<option value="${escapeHtml(s.relPath)}">${escapeHtml(s.title)} (${escapeHtml(s.relPath)})</option>`)
+          .join('');
+
+        selectEl.innerHTML = optionsHtml;
+      }
+    } catch (e) {
+      selectEl.innerHTML = '<option value="">Failed to load destinations</option>';
+    }
+
+    overlay.classList.add('open');
+    setTimeout(() => nameInput.focus(), 60);
+  }
+
+  function closeShareModal() {
+    const overlay = document.getElementById('share-modal-overlay');
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  async function handleShareSubmit(e) {
+    e.preventDefault();
+    const statusEl = document.getElementById('share-modal-status');
+    const selectEl = document.getElementById('share-target-parent-select');
+    const nameInput = document.getElementById('share-shortcut-name-input');
+
+    const parentPath = selectEl.value;
+    const name = nameInput.value.trim();
+
+    statusEl.textContent = 'Creating shortcut link on disk...';
+    try {
+      const res = await fetch('/api/share-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetPath: targetStationActionRelPath,
+          parentPath: parentPath,
+          name: name
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        closeShareModal();
+        fullGraphTreeData = null;
+
+        const currentRel = getCurrentRelPath();
+        if (currentRel === parentPath) {
+          await loadNodeOnDemand(currentRel, true, 'forward');
+        }
+      } else {
+        statusEl.textContent = `Error: ${data.error || 'Failed to create shortcut'}`;
+      }
+    } catch (err) {
+      statusEl.textContent = 'Error contacting disk server';
+    }
+  }
+
+  async function openDeleteModal(relPath) {
+    if (!relPath) return;
+    targetStationActionRelPath = relPath;
+
+    const overlay = document.getElementById('delete-modal-overlay');
+    const contextEl = document.getElementById('delete-modal-context');
+    const warningBox = document.getElementById('delete-warning-box');
+    const warningMsg = document.getElementById('delete-warning-message');
+    const forceGroup = document.getElementById('delete-force-group');
+    const forceCheckbox = document.getElementById('delete-force-checkbox');
+    const forceLabel = document.getElementById('delete-force-label');
+    const statusEl = document.getElementById('delete-modal-status');
+
+    statusEl.textContent = '';
+    forceCheckbox.checked = false;
+    forceGroup.style.display = 'none';
+    contextEl.textContent = `graph/${relPath}`;
+
+    warningBox.className = 'modal-warning-card';
+    warningMsg.innerHTML = 'Analyzing station contents...';
+    overlay.classList.add('open');
+
+    try {
+      const res = await fetch(`/api/node?path=${encodeURIComponent(relPath)}`);
+      if (res.ok) {
+        const node = await res.json();
+        const isShortcut = node.isShortcut || false;
+        const childrenCount = (node.children && node.children.length) || 0;
+        const filesCount = (node.extraFiles && node.extraFiles.length) || 0;
+
+        if (isShortcut) {
+          warningBox.className = 'modal-warning-card info';
+          warningMsg.innerHTML = `
+            <strong>↗ Deleting Shortcut Link</strong><br>
+            This station is a shortcut pointing to <code>${escapeHtml(node.canonicalRelPath || 'canonical station')}</code>.<br>
+            Only this shortcut pointer will be removed. The original canonical station and its notes will remain intact.
+          `;
+          forceGroup.style.display = 'none';
+        } else {
+          warningBox.className = 'modal-warning-card';
+          let warningHtml = `
+            <strong>⚠️ Permanently Delete Station</strong><br>
+            Are you sure you want to delete <strong>${escapeHtml(node.title)}</strong>? This will permanently delete the folder on disk.
+          `;
+
+          if (childrenCount > 0 || filesCount > 0) {
+            warningHtml += `<br><span style="margin-top: 4px; display: block;">⚠️ Contains <strong>${childrenCount} sub-station(s)</strong> and <strong>${filesCount} extra file(s)</strong>.</span>`;
+            forceGroup.style.display = 'block';
+            forceLabel.textContent = `I confirm permanent deletion of this station, its ${childrenCount} sub-station(s), and all files.`;
+          }
+
+          warningMsg.innerHTML = warningHtml;
+        }
+      }
+    } catch (e) {
+      warningMsg.textContent = 'Are you sure you want to delete this station from disk?';
+    }
+  }
+
+  function closeDeleteModal() {
+    const overlay = document.getElementById('delete-modal-overlay');
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  async function handleDeleteSubmit(e) {
+    e.preventDefault();
+    const statusEl = document.getElementById('delete-modal-status');
+    const forceCheckbox = document.getElementById('delete-force-checkbox');
+    const warningBox = document.getElementById('delete-warning-box');
+    const warningMsg = document.getElementById('delete-warning-message');
+    const forceGroup = document.getElementById('delete-force-group');
+    const forceLabel = document.getElementById('delete-force-label');
+
+    const force = forceCheckbox ? forceCheckbox.checked : false;
+    statusEl.textContent = 'Deleting station on disk...';
+
+    try {
+      const res = await fetch('/api/delete-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: targetStationActionRelPath,
+          force: force
+        })
+      });
+
+      const data = await res.json();
+      if (res.status === 409) {
+        warningBox.className = 'modal-warning-card';
+        const scCount = (data.referencingShortcuts && data.referencingShortcuts.length) || 0;
+        let msg = `<strong>⚠️ Confirmation Required:</strong><br>${escapeHtml(data.error || 'Station contains dependent items.')}`;
+        if (scCount > 0) {
+          msg += `<br>Referenced by <strong>${scCount} active shortcut(s)</strong>: <code>${data.referencingShortcuts.slice(0, 3).map(escapeHtml).join(', ')}</code>`;
+        }
+        warningMsg.innerHTML = msg;
+        forceGroup.style.display = 'block';
+        forceLabel.textContent = 'I understand and confirm permanent deletion of this station and all dependent items.';
+        statusEl.textContent = 'Please check the confirmation box and click Delete Station.';
+        return;
+      }
+
+      if (res.ok && data.success) {
+        closeDeleteModal();
+        closeMarkdownModal();
+        fullGraphTreeData = null;
+        nodeCache = {};
+
+        const parts = targetStationActionRelPath.split('/');
+        parts.pop();
+        const parentRel = parts.join('/');
+
+        while (historyStack.length > 0 && historyStack[historyStack.length - 1].relPath.startsWith(targetStationActionRelPath)) {
+          historyStack.pop();
+        }
+
+        await loadNodeOnDemand(parentRel, false, 'backward');
+        updateProgressStats();
+      } else {
+        statusEl.textContent = `Error: ${data.error || 'Failed to delete station'}`;
+      }
+    } catch (err) {
+      statusEl.textContent = 'Error contacting disk server';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 8c. Consolidated Notes Extraction Modal (Pre-order DFS)
   // ---------------------------------------------------------------------------
 
   let currentExtractedData = null;
@@ -1902,6 +2340,103 @@
       };
     }
 
+    // Station Management Header Actions (in Markdown modal)
+    const btnModalRename = document.getElementById('btn-modal-rename-station');
+    if (btnModalRename) {
+      btnModalRename.onclick = () => {
+        if (activeModalNodeRelPath) openRenameModal(activeModalNodeRelPath);
+      };
+    }
+
+    const btnModalMove = document.getElementById('btn-modal-move-station');
+    if (btnModalMove) {
+      btnModalMove.onclick = () => {
+        if (activeModalNodeRelPath) openMoveModal(activeModalNodeRelPath);
+      };
+    }
+
+    const btnModalShare = document.getElementById('btn-modal-share-station');
+    if (btnModalShare) {
+      btnModalShare.onclick = () => {
+        if (activeModalNodeRelPath) openShareModal(activeModalNodeRelPath);
+      };
+    }
+
+    const btnModalDelete = document.getElementById('btn-modal-delete-station');
+    if (btnModalDelete) {
+      btnModalDelete.onclick = () => {
+        if (activeModalNodeRelPath) openDeleteModal(activeModalNodeRelPath);
+      };
+    }
+
+    // Rename Modal Controls
+    const btnCloseRename = document.getElementById('btn-close-rename');
+    if (btnCloseRename) btnCloseRename.onclick = closeRenameModal;
+
+    const btnCancelRename = document.getElementById('btn-cancel-rename');
+    if (btnCancelRename) btnCancelRename.onclick = closeRenameModal;
+
+    const formRename = document.getElementById('form-rename-station');
+    if (formRename) formRename.onsubmit = handleRenameSubmit;
+
+    const overlayRename = document.getElementById('rename-modal-overlay');
+    if (overlayRename) {
+      overlayRename.onclick = (e) => {
+        if (e.target.id === 'rename-modal-overlay') closeRenameModal();
+      };
+    }
+
+    // Move Modal Controls
+    const btnCloseMove = document.getElementById('btn-close-move');
+    if (btnCloseMove) btnCloseMove.onclick = closeMoveModal;
+
+    const btnCancelMove = document.getElementById('btn-cancel-move');
+    if (btnCancelMove) btnCancelMove.onclick = closeMoveModal;
+
+    const formMove = document.getElementById('form-move-station');
+    if (formMove) formMove.onsubmit = handleMoveSubmit;
+
+    const overlayMove = document.getElementById('move-modal-overlay');
+    if (overlayMove) {
+      overlayMove.onclick = (e) => {
+        if (e.target.id === 'move-modal-overlay') closeMoveModal();
+      };
+    }
+
+    // Share Modal Controls
+    const btnCloseShare = document.getElementById('btn-close-share');
+    if (btnCloseShare) btnCloseShare.onclick = closeShareModal;
+
+    const btnCancelShare = document.getElementById('btn-cancel-share');
+    if (btnCancelShare) btnCancelShare.onclick = closeShareModal;
+
+    const formShare = document.getElementById('form-share-station');
+    if (formShare) formShare.onsubmit = handleShareSubmit;
+
+    const overlayShare = document.getElementById('share-modal-overlay');
+    if (overlayShare) {
+      overlayShare.onclick = (e) => {
+        if (e.target.id === 'share-modal-overlay') closeShareModal();
+      };
+    }
+
+    // Delete Modal Controls
+    const btnCloseDelete = document.getElementById('btn-close-delete');
+    if (btnCloseDelete) btnCloseDelete.onclick = closeDeleteModal;
+
+    const btnCancelDelete = document.getElementById('btn-cancel-delete');
+    if (btnCancelDelete) btnCancelDelete.onclick = closeDeleteModal;
+
+    const formDelete = document.getElementById('form-delete-station');
+    if (formDelete) formDelete.onsubmit = handleDeleteSubmit;
+
+    const overlayDelete = document.getElementById('delete-modal-overlay');
+    if (overlayDelete) {
+      overlayDelete.onclick = (e) => {
+        if (e.target.id === 'delete-modal-overlay') closeDeleteModal();
+      };
+    }
+
     // Keyboard Shortcuts (Ctrl+S / Cmd+S, Escape)
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -1911,14 +2446,14 @@
           saveMarkdownToDisk();
         }
       } else if (e.key === 'Escape') {
-        const modal = document.getElementById('markdown-modal-overlay');
-        if (modal && modal.classList.contains('open')) {
-          closeMarkdownModal();
-        }
-        const extractModal = document.getElementById('extract-modal-overlay');
-        if (extractModal && extractModal.classList.contains('open')) {
-          closeExtractModal();
-        }
+        closeMarkdownModal();
+        closeExtractModal();
+        closeAddChildModal();
+        closeExtraFilesModal();
+        closeRenameModal();
+        closeMoveModal();
+        closeShareModal();
+        closeDeleteModal();
       }
     });
   }

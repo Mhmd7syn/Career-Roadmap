@@ -138,6 +138,87 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         return curr, is_shortcut, canonical_rel
 
+    @staticmethod
+    def _slugify(name: str) -> str:
+        """Generate URL/folder safe slug from station title or name."""
+        cleaned = "".join(c if c.isalnum() else "-" for c in (name or "").lower()).strip("-")
+        safe = "".join(c for c in cleaned if c.isalnum() or c in ("-", "_")).strip("-")
+        return re.sub(r"-+", "-", safe)
+
+    def _sync_markdown_h1(self, file_path: Path, new_title: str):
+        """Update or insert the leading H1 markdown header."""
+        if not file_path.exists():
+            return
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            if re.search(r"^#\s+.*", content, flags=re.MULTILINE):
+                new_content = re.sub(r"^#\s+.*", f"# {new_title}", content, count=1, flags=re.MULTILINE)
+            else:
+                new_content = f"# {new_title}\n\n" + content
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+        except Exception as e:
+            print(f"[Error updating H1 in {file_path}]: {e}", file=sys.stderr)
+
+    def _update_shortcuts_for_relocated_node(self, old_rel: str, new_rel: str) -> list[str]:
+        """Cascade path updates across all shortcut.json files referencing old_rel or its descendants."""
+        if not old_rel or old_rel == new_rel:
+            return []
+
+        updated = []
+        old_prefix = old_rel + "/"
+
+        for root, dirs, files in os.walk(GRAPH_DIR):
+            if "shortcut.json" in files:
+                shortcut_path = Path(root) / "shortcut.json"
+                try:
+                    with open(shortcut_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+
+                    target = data.get("target", "").strip().replace("\\", "/")
+                    new_target = None
+
+                    if target == old_rel:
+                        new_target = new_rel
+                    elif target.startswith(old_prefix):
+                        new_target = new_rel + target[len(old_rel):]
+
+                    if new_target is not None:
+                        data["target"] = new_target
+                        with open(shortcut_path, "w", encoding="utf-8") as f:
+                            json.dump(data, f, indent=2)
+                        rel_shortcut = shortcut_path.parent.relative_to(GRAPH_DIR).as_posix()
+                        updated.append(rel_shortcut)
+                        print(f"[Shortcut Cascade]: Updated {rel_shortcut} target -> '{new_target}'")
+                except Exception as e:
+                    print(f"[Error updating shortcut {shortcut_path}]: {e}", file=sys.stderr)
+
+        return updated
+
+    def _find_referencing_shortcuts(self, target_rel: str) -> list[str]:
+        """Find all shortcut paths pointing to target_rel or its descendants."""
+        if not target_rel:
+            return []
+        referencing = []
+        target_prefix = target_rel + "/"
+
+        for root, dirs, files in os.walk(GRAPH_DIR):
+            if "shortcut.json" in files:
+                shortcut_path = Path(root) / "shortcut.json"
+                try:
+                    with open(shortcut_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    target = data.get("target", "").strip().replace("\\", "/")
+                    if target == target_rel or target.startswith(target_prefix):
+                        rel = shortcut_path.parent.relative_to(GRAPH_DIR).as_posix()
+                        referencing.append(rel)
+                except Exception:
+                    pass
+        return referencing
+
     def _parse_info_md(self, info_path: Path, default_title: str) -> tuple[str, str, str]:
         """Extract title, badge, and status from info.md, applying spaced repetition auto-decay."""
         title = default_title
@@ -972,6 +1053,14 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._handle_save_status(payload)
         elif path == "/api/add-child":
             self._handle_add_child(payload)
+        elif path == "/api/rename-node":
+            self._handle_rename_node(payload)
+        elif path == "/api/delete-node":
+            self._handle_delete_node(payload)
+        elif path == "/api/move-node":
+            self._handle_move_node(payload)
+        elif path == "/api/share-node":
+            self._handle_share_node(payload)
         elif path in ("/api/upload-extra-file", "/api/upload-resource"):
             self._handle_upload_extra_file(payload)
         else:
@@ -1074,10 +1163,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 if not name:
                     name = target_dir.name
 
-                child_id = "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-")
-                safe_child_id = "".join(c for c in child_id if c.isalnum() or c in ("-", "_")).strip("-")
-                if not safe_child_id:
-                    safe_child_id = target_dir.name
+                safe_child_id = self._slugify(name) or target_dir.name
 
                 child_dir = canonical_parent / safe_child_id
                 if child_dir.exists():
@@ -1105,8 +1191,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json(400, {"error": "Station name is required"})
                 return
 
-            child_id = "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-")
-            safe_child_id = "".join(c for c in child_id if c.isalnum() or c in ("-", "_")).strip("-")
+            safe_child_id = self._slugify(name)
 
             if not safe_child_id:
                 self._send_json(400, {"error": "Name must contain alphanumeric characters"})
@@ -1187,6 +1272,283 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 },
                 "node": self._scan_single_node(node_dir)
             })
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_rename_node(self, payload: dict):
+        raw_path = payload.get("path", "").strip()
+        new_title = payload.get("newTitle", "").strip()
+        new_slug = payload.get("newSlug", "").strip()
+
+        if not raw_path or raw_path in ("root", ".", ""):
+            self._send_json(400, {"error": "Root station cannot be renamed"})
+            return
+
+        safe_slug = self._slugify(new_slug) if new_slug else self._slugify(new_title)
+        if not safe_slug:
+            self._send_json(400, {"error": "Valid new title or slug is required"})
+            return
+
+        try:
+            source_dir = self._resolve_graph_folder(raw_path)
+            if not source_dir.exists() or not source_dir.is_dir():
+                self._send_json(404, {"error": f"Station folder not found at '{raw_path}'"})
+                return
+
+            if source_dir.resolve() == GRAPH_DIR.resolve():
+                self._send_json(400, {"error": "Root station cannot be renamed"})
+                return
+
+            parent_dir = source_dir.parent
+            dest_dir = parent_dir / safe_slug
+            old_rel = source_dir.relative_to(GRAPH_DIR).as_posix()
+            new_rel = dest_dir.relative_to(GRAPH_DIR).as_posix()
+
+            is_shortcut = (source_dir / "shortcut.json").exists()
+
+            # Collision check (handle case-only renames on Windows NTFS safely)
+            if dest_dir.exists() and source_dir.resolve() != dest_dir.resolve():
+                self._send_json(400, {"error": f"Station named '{safe_slug}' already exists in parent"})
+                return
+
+            # Rename directory on disk if slug changed
+            if source_dir.resolve() == dest_dir.resolve() and source_dir.name != dest_dir.name:
+                temp_dir = parent_dir / f"__temp_{os.getpid()}_{dest_dir.name}"
+                source_dir.rename(temp_dir)
+                temp_dir.rename(dest_dir)
+            elif source_dir != dest_dir:
+                source_dir.rename(dest_dir)
+
+            affected_shortcuts = []
+            if not is_shortcut:
+                if new_title:
+                    self._sync_markdown_h1(dest_dir / "info.md", new_title)
+                    self._sync_markdown_h1(dest_dir / "notes.md", new_title)
+                if old_rel != new_rel:
+                    affected_shortcuts = self._update_shortcuts_for_relocated_node(old_rel, new_rel)
+
+            print(f"[Node Renamed]: {old_rel} -> {new_rel} (is_shortcut={is_shortcut})")
+            self._send_json(200, {
+                "success": True,
+                "message": f"Station renamed to '{safe_slug}'",
+                "oldPath": old_rel,
+                "newPath": new_rel,
+                "isShortcut": is_shortcut,
+                "affectedShortcuts": affected_shortcuts,
+                "node": self._scan_single_node(dest_dir)
+            })
+        except PermissionError as pe:
+            self._send_json(403, {"error": str(pe)})
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_delete_node(self, payload: dict):
+        raw_path = payload.get("path", "").strip()
+        force = bool(payload.get("force", False))
+
+        if not raw_path or raw_path in ("root", ".", ""):
+            self._send_json(400, {"error": "Root station cannot be deleted"})
+            return
+
+        try:
+            target_dir = self._resolve_graph_folder(raw_path)
+            if not target_dir.exists() or not target_dir.is_dir():
+                self._send_json(404, {"error": f"Station folder not found at '{raw_path}'"})
+                return
+
+            if target_dir.resolve() == GRAPH_DIR.resolve():
+                self._send_json(400, {"error": "Root station cannot be deleted"})
+                return
+
+            rel_path = target_dir.relative_to(GRAPH_DIR).as_posix()
+            is_shortcut = (target_dir / "shortcut.json").exists()
+
+            if is_shortcut:
+                shutil.rmtree(target_dir)
+                print(f"[Shortcut Deleted]: {rel_path}")
+                self._send_json(200, {
+                    "success": True,
+                    "message": f"Shortcut pointer '{rel_path}' deleted",
+                    "deletedPath": rel_path,
+                    "isShortcut": True,
+                    "childCount": 0,
+                    "fileCount": 0,
+                    "affectedShortcuts": []
+                })
+                return
+
+            # Canonical station deletion checks
+            subdirs = [d for d in target_dir.iterdir() if d.is_dir() and not d.name.startswith((".", "__"))]
+            extra_files = [f for f in target_dir.iterdir() if f.is_file() and f.name not in CORE_NODE_FILES and f.name not in IGNORED_SYSTEM_FILES and not f.name.startswith(".")]
+            referencing_shortcuts = self._find_referencing_shortcuts(rel_path)
+
+            has_dependents = bool(subdirs or extra_files or referencing_shortcuts)
+            if has_dependents and not force:
+                self._send_json(409, {
+                    "error": "Station contains sub-stations, extra files, or active shortcut links",
+                    "requiresForce": True,
+                    "childCount": len(subdirs),
+                    "fileCount": len(extra_files),
+                    "referencingShortcuts": referencing_shortcuts
+                })
+                return
+
+            shutil.rmtree(target_dir)
+            cleaned_shortcuts = []
+            for sc_rel in referencing_shortcuts:
+                sc_dir = GRAPH_DIR / sc_rel
+                if sc_dir.exists() and (sc_dir / "shortcut.json").exists():
+                    try:
+                        shutil.rmtree(sc_dir)
+                        cleaned_shortcuts.append(sc_rel)
+                    except Exception as e:
+                        print(f"[Warning: Failed to clean dangling shortcut {sc_rel}]: {e}", file=sys.stderr)
+
+            print(f"[Node Deleted]: {rel_path} (force={force}, cleaned_shortcuts={len(cleaned_shortcuts)})")
+            self._send_json(200, {
+                "success": True,
+                "message": f"Station '{rel_path}' deleted",
+                "deletedPath": rel_path,
+                "isShortcut": False,
+                "childCount": len(subdirs),
+                "fileCount": len(extra_files),
+                "affectedShortcuts": referencing_shortcuts,
+                "cleanedShortcuts": cleaned_shortcuts
+            })
+        except PermissionError as pe:
+            self._send_json(403, {"error": str(pe)})
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_move_node(self, payload: dict):
+        source_path = payload.get("sourcePath", "").strip()
+        new_parent_path = payload.get("newParentPath", "").strip()
+
+        if not source_path or source_path in ("root", ".", ""):
+            self._send_json(400, {"error": "Root station cannot be moved"})
+            return
+
+        try:
+            source_dir = self._resolve_graph_folder(source_path)
+            if not source_dir.exists() or not source_dir.is_dir():
+                self._send_json(404, {"error": f"Source station not found at '{source_path}'"})
+                return
+
+            if source_dir.resolve() == GRAPH_DIR.resolve():
+                self._send_json(400, {"error": "Root station cannot be moved"})
+                return
+
+            new_parent_dir = self._resolve_graph_folder(new_parent_path)
+            if not new_parent_dir.exists() or not new_parent_dir.is_dir():
+                self._send_json(404, {"error": f"Target parent station not found at '{new_parent_path}'"})
+                return
+
+            canonical_parent, _, _ = self._resolve_shortcut(new_parent_dir)
+
+            src_res = source_dir.resolve()
+            parent_res = canonical_parent.resolve()
+
+            if src_res == parent_res:
+                self._send_json(400, {"error": "Cannot move a station into itself"})
+                return
+
+            if parent_res.is_relative_to(src_res):
+                self._send_json(400, {"error": "Cannot move a station into one of its own sub-stations (cycle detected)"})
+                return
+
+            if source_dir.parent.resolve() == parent_res:
+                self._send_json(400, {"error": "Station is already located in this parent hub"})
+                return
+
+            dest_dir = canonical_parent / source_dir.name
+            if dest_dir.exists():
+                self._send_json(400, {"error": f"Station named '{source_dir.name}' already exists in destination parent"})
+                return
+
+            old_rel = source_dir.relative_to(GRAPH_DIR).as_posix()
+            is_shortcut = (source_dir / "shortcut.json").exists()
+
+            shutil.move(str(source_dir), str(dest_dir))
+            new_rel = dest_dir.relative_to(GRAPH_DIR).as_posix()
+
+            affected_shortcuts = []
+            if not is_shortcut:
+                affected_shortcuts = self._update_shortcuts_for_relocated_node(old_rel, new_rel)
+
+            print(f"[Node Moved]: {old_rel} -> {new_rel} (affected_shortcuts={len(affected_shortcuts)})")
+            self._send_json(200, {
+                "success": True,
+                "message": f"Station moved to '{new_rel}'",
+                "oldPath": old_rel,
+                "newPath": new_rel,
+                "isShortcut": is_shortcut,
+                "affectedShortcuts": affected_shortcuts,
+                "node": self._scan_single_node(dest_dir)
+            })
+        except PermissionError as pe:
+            self._send_json(403, {"error": str(pe)})
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_share_node(self, payload: dict):
+        target_path = payload.get("targetPath", "").strip()
+        parent_path = payload.get("parentPath", "").strip()
+        custom_name = payload.get("name", "").strip()
+
+        if not target_path or target_path in ("root", ".", ""):
+            self._send_json(400, {"error": "Cannot share the root station"})
+            return
+
+        try:
+            target_dir = self._resolve_graph_folder(target_path)
+            if not target_dir.exists() or not target_dir.is_dir():
+                self._send_json(404, {"error": f"Target station not found at '{target_path}'"})
+                return
+
+            canonical_target, _, _ = self._resolve_shortcut(target_dir)
+            if canonical_target.resolve() == GRAPH_DIR.resolve():
+                self._send_json(400, {"error": "Cannot create shortcut pointing to root"})
+                return
+
+            parent_dir = self._resolve_graph_folder(parent_path)
+            if not parent_dir.exists() or not parent_dir.is_dir():
+                self._send_json(404, {"error": f"Destination parent not found at '{parent_path}'"})
+                return
+
+            canonical_parent, _, _ = self._resolve_shortcut(parent_dir)
+
+            if canonical_target.resolve() == canonical_parent.resolve():
+                self._send_json(400, {"error": "Cannot create shortcut pointing to the parent station itself"})
+                return
+
+            slug_base = custom_name if custom_name else target_dir.name
+            safe_slug = self._slugify(slug_base)
+            if not safe_slug:
+                safe_slug = target_dir.name
+
+            shortcut_dir = canonical_parent / safe_slug
+            if shortcut_dir.exists():
+                self._send_json(400, {"error": f"Station or shortcut named '{safe_slug}' already exists under destination parent"})
+                return
+
+            shortcut_dir.mkdir(parents=True, exist_ok=True)
+            canonical_target_rel = canonical_target.relative_to(GRAPH_DIR).as_posix()
+            shortcut_data = {
+                "target": canonical_target_rel
+            }
+            with open(shortcut_dir / "shortcut.json", "w", encoding="utf-8") as f:
+                json.dump(shortcut_data, f, indent=2)
+
+            print(f"[Node Shared]: Created shortcut at {shortcut_dir} pointing to {canonical_target_rel}")
+            self._send_json(200, {
+                "success": True,
+                "message": f"Shortcut created pointing to '{canonical_target_rel}'",
+                "shortcutPath": shortcut_dir.relative_to(GRAPH_DIR).as_posix(),
+                "canonicalPath": canonical_target_rel,
+                "node": self._scan_single_node(shortcut_dir)
+            })
+        except PermissionError as pe:
+            self._send_json(403, {"error": str(pe)})
         except Exception as e:
             self._send_json(400, {"error": str(e)})
 

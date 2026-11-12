@@ -25,3 +25,7 @@ jobs:
       - name: Syntax check server.py
         run: |
           python -m py_compile server.py
+
+      - name: Run station management test suite
+        run: |
+          python -m unittest discover tests
