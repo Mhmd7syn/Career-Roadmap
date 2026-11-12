@@ -634,6 +634,14 @@
     }
 
     targetEl.innerHTML = html;
+    targetEl.setAttribute('dir', 'auto');
+
+    // Apply dir="auto" to block elements for bidirectional (BiDi) text alignment
+    targetEl.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote').forEach(el => {
+      if (!el.getAttribute('dir')) {
+        el.setAttribute('dir', 'auto');
+      }
+    });
 
     if (window.renderMathInElement) {
       try {

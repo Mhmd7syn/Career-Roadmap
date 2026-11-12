@@ -25,7 +25,7 @@
     <div class="header-center">
       <div class="search-container" id="search-container">
         <span class="search-icon">🔍</span>
-        <input type="text" class="search-input" id="search-input" placeholder="Search stations, notes, files... (/)" autocomplete="off" spellcheck="false">
+        <input type="text" class="search-input" id="search-input" dir="auto" placeholder="Search stations, notes, files... (/)" autocomplete="off" spellcheck="false">
         <kbd class="search-shortcut-hint" id="search-shortcut-hint">/</kbd>
         <button type="button" class="btn-search-clear" id="btn-search-clear" style="display: none;" title="Clear search">&times;</button>
         <div class="search-dropdown" id="search-dropdown" style="display: none;">
@@ -146,7 +146,7 @@
 
       <div class="summary-modal-body">
         <!-- Rendered Markdown View (Marked.js + KaTeX) -->
-        <div class="markdown-preview markdown-body" id="md-rendered-view"></div>
+        <div class="markdown-preview markdown-body" id="md-rendered-view" dir="auto"></div>
 
         <!-- Markdown Source Code Editor -->
         <div class="markdown-editor-pane" id="md-editor-view" style="display: none;">
@@ -158,7 +158,7 @@
             <button type="button" class="btn-tool" data-tool="check" title="Task List">☑ Task</button>
             <span class="editor-shortcut-hint">Auto-saved</span>
           </div>
-          <textarea class="summary-editor-textarea" id="md-textarea" spellcheck="false" placeholder="Write markdown content..."></textarea>
+          <textarea class="summary-editor-textarea" id="md-textarea" dir="auto" spellcheck="false" placeholder="Write markdown content..."></textarea>
         </div>
       </div>
     </div>
@@ -213,7 +213,7 @@
         <!-- New Station Fields -->
         <div class="form-group" id="group-new-station-name">
           <label class="form-label" for="new-child-name">Station Name <span class="required">*</span></label>
-          <input type="text" id="new-child-name" class="form-input" placeholder="e.g. Docker, Linear Algebra..." required autofocus autocomplete="off">
+          <input type="text" id="new-child-name" class="form-input" dir="auto" placeholder="e.g. Docker, Linear Algebra..." required autofocus autocomplete="off">
         </div>
 
         <!-- Shortcut Selector Fields -->
@@ -253,7 +253,7 @@
       <form id="form-rename-station" class="modal-form">
         <div class="form-group">
           <label class="form-label" for="rename-title-input">Station Title <span class="required">*</span></label>
-          <input type="text" id="rename-title-input" class="form-input" placeholder="e.g. Applied Software Engineering" required autocomplete="off">
+          <input type="text" id="rename-title-input" class="form-input" dir="auto" placeholder="e.g. Applied Software Engineering" required autocomplete="off">
         </div>
 
         <div class="form-group">
@@ -331,7 +331,7 @@
 
         <div class="form-group">
           <label class="form-label" for="share-shortcut-name-input">Shortcut Display Name (Optional)</label>
-          <input type="text" id="share-shortcut-name-input" class="form-input" placeholder="Leave blank to use station name" autocomplete="off">
+          <input type="text" id="share-shortcut-name-input" class="form-input" dir="auto" placeholder="Leave blank to use station name" autocomplete="off">
           <span class="form-hint" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; display: block;">
             Creates a lightweight alias pointer so this station appears in another track while maintaining notes in one place.
           </span>
@@ -414,7 +414,7 @@
             <div class="extract-spinner"></div>
             <span>Traversing tree and compiling study notes...</span>
           </div>
-          <article class="extract-markdown-body markdown-body" id="extract-markdown-body"></article>
+          <article class="extract-markdown-body markdown-body" id="extract-markdown-body" dir="auto"></article>
         </div>
       </div>
     </div>
