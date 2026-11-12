@@ -30,5 +30,5 @@ Every station `info.md` must enforce the 3 stages of progressive mastery nativel
 ## 5. Architectural & System Invariants
 - **Directory-as-Graph:** The folder hierarchy directly represents the graph hierarchy. Every station is a folder containing `info.md` and optional `notes.md`.
 - **Pure Python Backend:** Zero external pip dependencies. `server.py` must only use Python 3's built-in standard library (`http.server`, `urllib`, `pathlib`, etc.).
-- **Vendored Assets:** Zero npm dependencies. Offline assets reside in `libs/` ([KaTeX](libs/katex.min.js), [Marked.js](libs/marked.min.js)).
+- **Vendored Assets:** Zero npm dependencies. Offline assets reside in `web/libs/` ([KaTeX](web/libs/katex.min.js), [Marked.js](web/libs/marked.min.js)).
 - **Private Data Isolation:** The root repository is public, while `graph/` is a private submodule. All personal/private data, account subscriptions, private notes, and user-specific rules must reside exclusively inside the `graph/` directory.

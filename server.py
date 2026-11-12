@@ -28,6 +28,7 @@ import threading
 from datetime import datetime, date
 
 BASE_DIR = Path(__file__).resolve().parent
+WEB_DIR = BASE_DIR / "web"
 GRAPH_DIR = Path(os.getenv("GRAPH_DIR", BASE_DIR / "graph")).resolve()
 TEMPLATE_DIR = BASE_DIR / "graph.template"
 CORE_NODE_FILES = {"info.md", "notes.md", "shortcut.json"}
@@ -51,7 +52,23 @@ def ensure_graph_initialized():
 
 class GraphRequestHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(BASE_DIR), **kwargs)
+        super().__init__(*args, directory=str(WEB_DIR), **kwargs)
+
+    def translate_path(self, path: str) -> str:
+        """Route /graph/* directly to GRAPH_DIR and all presentation assets to WEB_DIR."""
+        parsed = urllib.parse.urlparse(path)
+        clean_path = urllib.parse.unquote(parsed.path)
+
+        if clean_path.startswith("/graph/"):
+            rel_graph = clean_path[7:].lstrip("/\\")
+            target = (GRAPH_DIR / rel_graph).resolve()
+            if target.is_relative_to(GRAPH_DIR.resolve()):
+                return str(target)
+            return str(GRAPH_DIR / "__invalid__")
+        elif clean_path in ("/graph", "/graph/"):
+            return str(GRAPH_DIR.resolve())
+
+        return super().translate_path(path)
 
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -319,10 +336,10 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         if canonical_folder.exists() and canonical_folder.is_dir():
             for f in sorted(canonical_folder.iterdir(), key=lambda x: x.name.lower()):
                 if f.is_file() and f.name not in CORE_NODE_FILES and f.name not in IGNORED_SYSTEM_FILES and not f.name.startswith("."):
-                    rel_to_base = f.relative_to(BASE_DIR).as_posix()
+                    rel_to_graph = f.relative_to(GRAPH_DIR).as_posix()
                     extra_files.append({
                         "label": f.name,
-                        "url": rel_to_base,
+                        "url": f"graph/{rel_to_graph}",
                         "size": f.stat().st_size,
                         "ext": f.suffix.lstrip(".").lower()
                     })
@@ -1259,14 +1276,14 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             with open(target_file, "wb") as f:
                 f.write(file_bytes)
 
-            rel_to_base = target_file.relative_to(BASE_DIR).as_posix()
+            rel_to_graph = target_file.relative_to(GRAPH_DIR).as_posix()
             print(f"[Extra File Uploaded]: {target_file} ({len(file_bytes)} bytes)")
             self._send_json(200, {
                 "success": True,
                 "message": f"File '{safe_filename}' saved to folder",
                 "file": {
                     "label": safe_filename,
-                    "url": rel_to_base,
+                    "url": f"graph/{rel_to_graph}",
                     "size": len(file_bytes),
                     "ext": target_file.suffix.lstrip(".").lower()
                 },
@@ -1571,7 +1588,7 @@ def run_server(port=8000, open_browser=True):
     print("\n" + "=" * 64)
     print(" [+] KNOWLEDGE GRAPH SERVER (Python 3.14)")
     print("=" * 64)
-    print(f" Serving workspace at : {BASE_DIR}")
+    print(f" Serving web app from : {WEB_DIR}")
     print(f" Graph directory      : {GRAPH_DIR}")
     print(f" Local URL            : {url}")
     print("=" * 64)

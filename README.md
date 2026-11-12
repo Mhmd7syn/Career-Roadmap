@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Dependencies: None](https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Stdlib)-green.svg)](requirements.txt)
-[![Offline First](https://img.shields.io/badge/Offline-100%25%20Self--Contained-success.svg)](libs/)
+[![Offline First](https://img.shields.io/badge/Offline-100%25%20Self--Contained-success.svg)](web/libs/)
 
 *Knowledge grows farther and deeper through time.*
 
@@ -19,7 +19,7 @@ A lightweight, offline-first, **Directory-as-Graph** visual knowledge platform a
   - `notes.md`: Personal study notes, code implementations, architectural insights, and LaTeX formulas.
 - **Focused Local Graph Canvas:** Smooth spline-connected local stage presenting strictly the active parent node and its immediate children, keeping cognitive load minimal.
 - **Single-Click Node Creation:** Add new child stations instantly via the interactive `+` action with direct disk persistence.
-- **Zero External Dependencies:** No `npm install`, no `pip install`. Runs directly on Python's built-in standard library with vendored offline libraries ([KaTeX](libs/katex.min.js) and [Marked.js](libs/marked.min.js)).
+- **Zero External Dependencies:** No `npm install`, no `pip install`. Runs directly on Python's built-in standard library with vendored offline libraries ([KaTeX](web/libs/katex.min.js) and [Marked.js](web/libs/marked.min.js)).
 - **Privacy-Decoupled Architecture:** Keep the engine open-source while storing your personal notes in a private repository or submodule.
 - **Local Disk Persistence:** Instant file updates, node additions, status changes, and file uploads write directly to disk with no intermediaries.
 
@@ -98,14 +98,17 @@ The roadmap content, progressive mastery structure, and station specifications f
 ```
 knowledge-graph/
 ├── .github/                 # Issue & PR templates, CI workflows
-├── app.js                   # Visual canvas engine, layout & UI transitions
-├── index.html               # Canvas and modal presentation markup
-├── style.css                # Dark-mode styling, typography, and controls
+├── web/                     # Web application presentation layer
+│   ├── app.js               # Visual canvas engine, layout & UI transitions
+│   ├── index.html           # Canvas and modal presentation markup
+│   ├── style.css            # Dark-mode styling, typography, and controls
+│   └── libs/                # Vendored offline assets (KaTeX, Marked.js)
 ├── server.py                # Pure Python HTTP server & file-system API
 ├── run.bat                  # One-click Windows launch script
-├── AGENTS.md                # AI agent instructions & node creation spec
+├── tests/                   # Automated standard library test suite
+├── graph/                   # Private submodule notes & stations
 ├── graph.template/          # Starter sample roadmap stations and templates
-├── libs/                    # Vendored offline assets (KaTeX, Marked.js)
+├── AGENTS.md                # AI agent instructions & node creation spec
 ├── requirements.txt         # Dependency documentation (zero external pip packages)
 └── LICENSE                  # MIT License
 ```
