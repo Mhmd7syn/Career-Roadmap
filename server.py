@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Career Knowledge Graph Local Server
+Knowledge Graph Local Server
 Powered by Python 3.14
 Optimized Lazy-Loading Directory-as-Graph Engine:
 - Only loads data for the currently viewed node on demand to decrease computation.
@@ -25,12 +25,14 @@ from collections import deque
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import webbrowser
 import threading
+from datetime import datetime, date
 
 BASE_DIR = Path(__file__).resolve().parent
 GRAPH_DIR = Path(os.getenv("GRAPH_DIR", BASE_DIR / "graph")).resolve()
 TEMPLATE_DIR = BASE_DIR / "graph.template"
 CORE_NODE_FILES = {"info.md", "notes.md", "shortcut.json"}
-IGNORED_SYSTEM_FILES = {".DS_Store", "desktop.ini", "Thumbs.db"}
+IGNORED_SYSTEM_FILES = {".DS_Store", "desktop.ini", "Thumbs.db", "AGENTS.md", "agents.md", "agent.md"}
+REVIEW_DECAY_DAYS = 30  # 1 month spaced repetition decay threshold
 
 
 def ensure_graph_initialized():
@@ -137,7 +139,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         return curr, is_shortcut, canonical_rel
 
     def _parse_info_md(self, info_path: Path, default_title: str) -> tuple[str, str, str]:
-        """Extract title, badge, and status from info.md."""
+        """Extract title, badge, and status from info.md, applying spaced repetition auto-decay."""
         title = default_title
         badge = ""
         status = "todo"
@@ -150,6 +152,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 content = f.read()
 
             lines = content.splitlines()
+            completed_date = None
 
             for line in lines:
                 stripped = line.strip()
@@ -169,6 +172,27 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     m_badge = re.search(r"badge[:\*]+\s*([^|\n*]+)", stripped, re.IGNORECASE)
                     if m_badge:
                         badge = m_badge.group(1).strip()
+
+                if "completed" in stripped.lower():
+                    m_comp = re.search(r"completed(?:\s*date|_at)?[:\*]+\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", stripped, re.IGNORECASE)
+                    if m_comp:
+                        try:
+                            completed_date = datetime.strptime(m_comp.group(1), "%Y-%m-%d").date()
+                        except ValueError:
+                            pass
+
+            # Auto-decay logic: stations marked 'completed' decay to 'needs-review' after REVIEW_DECAY_DAYS (30 days / 1 month)
+            if status == "completed":
+                if not completed_date:
+                    try:
+                        completed_date = datetime.fromtimestamp(info_path.stat().st_mtime).date()
+                    except Exception:
+                        completed_date = datetime.now().date()
+
+                days_elapsed = (datetime.now().date() - completed_date).days
+                if days_elapsed >= REVIEW_DECAY_DAYS:
+                    status = "needs-review"
+                    self._update_status_in_info_md(info_path, "needs-review", completed_date_str=completed_date.isoformat())
 
             return title, badge, status
         except Exception as e:
@@ -562,17 +586,20 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         sliced = results[:limit] if limit > 0 else results
         return sliced, total_count
 
-    def _update_status_in_info_md(self, info_path: Path, new_status: str):
+    def _update_status_in_info_md(self, info_path: Path, new_status: str, completed_date_str: str = None):
+        today_str = datetime.now().date().isoformat()
         if not info_path.exists():
             fallback_title = info_path.parent.name.replace("-", " ").replace("_", " ").title()
+            comp_line = f"**Completed:** {today_str}\n" if new_status == "completed" else ""
             with open(info_path, "w", encoding="utf-8") as f:
-                f.write(f"# {fallback_title}\n\n**Status:** {new_status}\n\n")
+                f.write(f"# {fallback_title}\n\n**Status:** {new_status}\n{comp_line}\n")
             return
 
         try:
             with open(info_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
+            # 1. Update or insert status
             pattern = re.compile(r"(\*\*Status:\*\*\s*)([a-zA-Z0-9_\-]+)", re.IGNORECASE)
             if pattern.search(content):
                 updated = pattern.sub(rf"\g<1>{new_status}", content)
@@ -585,6 +612,35 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     insert_idx = 1 if len(lines) > 1 else len(lines)
                     lines.insert(insert_idx, f"**Status:** {new_status}")
                     updated = "\n".join(lines)
+
+            # 2. Update, preserve, or remove completion date
+            comp_pattern = re.compile(r"(\*\*Completed:\*\*\s*)([0-9]{4}-[0-9]{2}-[0-9]{2})", re.IGNORECASE)
+            comp_pattern2 = re.compile(r"(completed(?:\s*date|_at)?:\s*)([0-9]{4}-[0-9]{2}-[0-9]{2})", re.IGNORECASE)
+
+            if new_status == "completed":
+                date_to_write = completed_date_str or today_str
+                if comp_pattern.search(updated):
+                    updated = comp_pattern.sub(rf"\g<1>{date_to_write}", updated)
+                elif comp_pattern2.search(updated):
+                    updated = comp_pattern2.sub(rf"\g<1>{date_to_write}", updated)
+                else:
+                    stat_match = re.search(r"(\*\*Status:\*\*[^\n]*)", updated, re.IGNORECASE)
+                    if stat_match:
+                        updated = updated[:stat_match.end()] + f"\n**Completed:** {date_to_write}" + updated[stat_match.end():]
+                    else:
+                        stat_match2 = re.search(r"(status:[^\n]*)", updated, re.IGNORECASE)
+                        if stat_match2:
+                            updated = updated[:stat_match2.end()] + f"\n**Completed:** {date_to_write}" + updated[stat_match2.end():]
+            elif new_status == "needs-review":
+                # Ensure the original completion date is preserved in metadata
+                if completed_date_str and not (comp_pattern.search(updated) or comp_pattern2.search(updated)):
+                    stat_match = re.search(r"(\*\*Status:\*\*[^\n]*)", updated, re.IGNORECASE)
+                    if stat_match:
+                        updated = updated[:stat_match.end()] + f"\n**Completed:** {completed_date_str}" + updated[stat_match.end():]
+            else:
+                # If reverting to todo or in-progress, strip completion metadata
+                updated = re.sub(r"\n?\*\*Completed:\*\*\s*[0-9]{4}-[0-9]{2}-[0-9]{2}", "", updated, flags=re.IGNORECASE)
+                updated = re.sub(r"\n?completed(?:\s*date|_at)?:\s*[0-9]{4}-[0-9]{2}-[0-9]{2}", "", updated, flags=re.IGNORECASE)
 
             with open(info_path, "w", encoding="utf-8") as f:
                 f.write(updated)
@@ -659,6 +715,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         """Lightweight overall progress computation across unique canonical stations."""
         visited_canonical = set()
         completed = 0
+        needs_review = 0
         for root, dirs, files in os.walk(GRAPH_DIR):
             rpath = Path(root)
             if rpath == GRAPH_DIR or rpath.name.startswith((".", "__")):
@@ -672,12 +729,11 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             info_file = canonical_path / "info.md"
             if info_file.exists():
                 try:
-                    with open(info_file, "r", encoding="utf-8") as f:
-                        for line in f:
-                            lower = line.lower()
-                            if "status: completed" in lower or "status:** completed" in lower:
-                                completed += 1
-                                break
+                    _, _, status = self._parse_info_md(info_file, rpath.name)
+                    if status == "completed":
+                        completed += 1
+                    elif status == "needs-review":
+                        needs_review += 1
                 except Exception:
                     pass
 
@@ -686,6 +742,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         self._send_json(200, {
             "total": total,
             "completed": completed,
+            "needsReview": needs_review,
             "percent": percent
         })
 
@@ -761,9 +818,9 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "Invalid JSON body"})
             return
 
-        if path in ("/api/save-info", "/api/save-file") and payload.get("file") == "info.md":
+        if path == "/api/save-info" or (path == "/api/save-file" and payload.get("file") == "info.md"):
             self._handle_save_info(payload)
-        elif path in ("/api/save-notes", "/api/save-summary", "/api/save-file"):
+        elif path in ("/api/save-notes", "/api/save-summary") or (path == "/api/save-file" and payload.get("file") != "info.md"):
             self._handle_save_notes(payload)
         elif path == "/api/save-status":
             self._handle_save_status(payload)
@@ -1004,7 +1061,7 @@ def run_server(port=8000, open_browser=True):
 
     url = f"http://localhost:{port}"
     print("\n" + "=" * 64)
-    print(" [+] CAREER KNOWLEDGE GRAPH SERVER (Python 3.14)")
+    print(" [+] KNOWLEDGE GRAPH SERVER (Python 3.14)")
     print("=" * 64)
     print(f" Serving workspace at : {BASE_DIR}")
     print(f" Graph directory      : {GRAPH_DIR}")

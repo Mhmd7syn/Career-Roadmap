@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Career Knowledge Graph — Minimalist Dark Theme
+   Knowledge Graph — Minimalist Dark Theme
    ========================================================================== */
 
 :root {
@@ -17,6 +17,7 @@
   --accent-green: #238636;
   --accent-green-text: #3fb950;
   --accent-yellow: #d29922;
+  --accent-orange: #f0883e;
   --accent-purple: #a371f7;
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -396,6 +397,15 @@ body {
   color: var(--accent-green-text);
 }
 
+.next-node-pill.is-needs-review {
+  background: rgba(240, 136, 62, 0.15);
+  border-color: rgba(240, 136, 62, 0.45);
+}
+
+.next-node-pill.is-needs-review .next-node-label {
+  color: var(--accent-orange);
+}
+
 .next-node-label {
   color: var(--accent-blue);
   font-weight: 700;
@@ -503,6 +513,14 @@ body {
   filter: drop-shadow(0 0 4px rgba(56, 139, 253, 0.4));
 }
 
+.graph-svg-path.needs-review {
+  stroke: var(--accent-orange);
+  stroke-width: 2.5px;
+  opacity: 0.95;
+  stroke-dasharray: 4 4;
+  filter: drop-shadow(0 0 5px rgba(240, 136, 62, 0.5));
+}
+
 .graph-svg-path.highlight {
   stroke: var(--border-active);
   stroke-width: 3px;
@@ -595,6 +613,22 @@ body {
   color: #56d364;
   border-color: var(--accent-green-text);
   background: rgba(35, 134, 54, 0.2);
+}
+
+.btn-status-cycle.status-needs-review {
+  color: var(--accent-orange);
+  border-color: var(--accent-orange);
+  background: rgba(240, 136, 62, 0.15);
+  animation: status-review-pulse 2.5s infinite ease-in-out;
+}
+
+@keyframes status-review-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(240, 136, 62, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(240, 136, 62, 0);
+  }
 }
 
 .graph-parent-title {
@@ -769,6 +803,11 @@ body {
 .child-status-dot.in-progress {
   background: var(--accent-blue);
   box-shadow: 0 0 8px rgba(56, 139, 253, 0.6);
+}
+
+.child-status-dot.needs-review {
+  background: var(--accent-orange);
+  box-shadow: 0 0 8px rgba(240, 136, 62, 0.7);
 }
 
 .child-index {
@@ -972,6 +1011,65 @@ body {
 .btn-tab.active {
   background: var(--accent-blue);
   color: #fff;
+}
+
+.autosave-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.autosave-status .autosave-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-green-text);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.autosave-status.saved {
+  color: var(--accent-green-text);
+  border-color: rgba(63, 185, 80, 0.25);
+}
+
+.autosave-status.saved .autosave-dot {
+  background: var(--accent-green-text);
+  box-shadow: 0 0 5px rgba(63, 185, 80, 0.5);
+}
+
+.autosave-status.saving {
+  color: var(--accent-yellow);
+  border-color: rgba(210, 153, 34, 0.35);
+}
+
+.autosave-status.saving .autosave-dot {
+  background: var(--accent-yellow);
+  box-shadow: 0 0 6px rgba(210, 153, 34, 0.6);
+  animation: pulse-dot 1s infinite alternate;
+}
+
+.autosave-status.error {
+  color: #f85149;
+  border-color: rgba(248, 81, 73, 0.35);
+}
+
+.autosave-status.error .autosave-dot {
+  background: #f85149;
+  box-shadow: 0 0 5px rgba(248, 81, 73, 0.5);
+}
+
+@keyframes pulse-dot {
+  0% { opacity: 0.4; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1.1); }
 }
 
 .btn-save-disk {
@@ -1535,6 +1633,11 @@ body {
   box-shadow: 0 0 6px rgba(63, 185, 80, 0.5);
 }
 
+.legend-dot.status-needs-review {
+  background-color: var(--accent-orange);
+  box-shadow: 0 0 6px rgba(240, 136, 62, 0.5);
+}
+
 .legend-dot.status-in-progress {
   background-color: var(--accent-yellow);
   box-shadow: 0 0 6px rgba(210, 153, 34, 0.5);
@@ -1628,6 +1731,12 @@ body {
   opacity: 0.7;
 }
 
+.fg-edge.status-needs-review {
+  stroke: var(--accent-orange);
+  stroke-dasharray: 4 3;
+  opacity: 0.85;
+}
+
 .fg-edge.status-in-progress {
   stroke: var(--accent-yellow);
   opacity: 0.8;
@@ -1675,6 +1784,10 @@ body {
 
 .fg-status-dot.completed {
   fill: var(--accent-green-text);
+}
+
+.fg-status-dot.needs-review {
+  fill: var(--accent-orange);
 }
 
 .fg-status-dot.in-progress {

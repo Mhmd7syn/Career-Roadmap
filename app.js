@@ -1,5 +1,5 @@
 /**
- * Career Knowledge Graph Engine
+ * Knowledge Graph Engine
  * Lazy-Loading Directory-as-Graph:
  * - Loads station data on demand directly from disk.
  * - Each station has strictly two files:
@@ -19,6 +19,9 @@
   let activeModalNodeRelPath = '';
   let activeDocType = 'info'; // 'info' (info.md) | 'notes' (notes.md)
   let activeEditorMode = 'preview'; // 'preview' | 'edit'
+  let autoSaveTimer = null;
+  let lastSavedContent = '';
+  let isSavingMarkdown = false;
   let targetAddChildParentId = '';
 
   // ---------------------------------------------------------------------------
@@ -87,7 +90,13 @@
         const percent = data.percent || 0;
         if (progressFill) progressFill.style.width = percent + '%';
         if (progressText) progressText.textContent = `${percent}%`;
-        if (progressPill) progressPill.title = `${data.completed}/${data.total} Completed (${percent}%)`;
+        if (progressPill) {
+          let tooltip = `${data.completed}/${data.total} Completed (${percent}%)`;
+          if (data.needsReview) {
+            tooltip += ` • ${data.needsReview} Need Review`;
+          }
+          progressPill.title = tooltip;
+        }
       }
     } catch (e) {
       // Disk fetch error
@@ -168,8 +177,12 @@
         const isCurrent = data.isCurrentNode;
 
         nextPill.style.display = 'inline-flex';
-        nextPill.classList.remove('is-completed');
-        if (isCurrent) {
+        nextPill.classList.remove('is-completed', 'is-needs-review');
+        if (node.status === 'needs-review') {
+          nextPill.classList.add('is-needs-review');
+          nextLabel.textContent = 'Review:';
+          nextPill.title = `Needs Review: ${node.title} (${node.category}) — click to review`;
+        } else if (isCurrent) {
           nextPill.classList.add('is-current');
           nextLabel.textContent = 'Current:';
           nextPill.title = `Current Focus: ${node.title} (${node.category}) — click to view info.md`;
@@ -339,8 +352,8 @@
     parentAnchor.innerHTML = `
       <div class="graph-parent-card">
         <div class="graph-parent-top-row">
-          <button class="btn-status-cycle status-${currentStatus}" id="btn-status-toggle" title="Cycle status: To Do → In Progress → Done">
-            ${currentStatus === 'completed' ? '● Done' : (currentStatus === 'in-progress' ? '◐ In Progress' : '○ To Do')}
+          <button class="btn-status-cycle status-${currentStatus}" id="btn-status-toggle" title="${currentStatus === 'needs-review' ? 'Needs review after 1 month. Click to mark reviewed and completed' : 'Cycle status: To Do → In Progress → Done'}">
+            ${currentStatus === 'completed' ? '● Done' : (currentStatus === 'in-progress' ? '◐ In Progress' : (currentStatus === 'needs-review' ? '⚠ Needs Review' : '○ To Do'))}
           </button>
           ${shortcutBadgeHtml}
           ${badgeText ? `<span style="font-size: 0.72rem; color: var(--accent-blue); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">${badgeText}</span>` : ''}
@@ -357,7 +370,12 @@
 
     // Bind Parent Card Actions
     document.getElementById('btn-status-toggle').onclick = () => {
-      const nextMap = { 'todo': 'in-progress', 'in-progress': 'completed', 'completed': 'todo' };
+      const nextMap = {
+        'todo': 'in-progress',
+        'in-progress': 'completed',
+        'completed': 'todo',
+        'needs-review': 'completed'
+      };
       setNodeStatus(nextMap[currentStatus] || 'todo');
     };
 
@@ -397,7 +415,11 @@
       nodeEl.dataset.status = childStatus;
       nodeEl.dataset.id = child.id;
 
-      const dotClass = childStatus === 'completed' ? 'completed' : (childStatus === 'in-progress' ? 'in-progress' : 'todo');
+      const dotClass = childStatus === 'completed'
+        ? 'completed'
+        : (childStatus === 'in-progress'
+          ? 'in-progress'
+          : (childStatus === 'needs-review' ? 'needs-review' : 'todo'));
 
       nodeEl.innerHTML = `
         <span class="child-status-dot ${dotClass}"></span>
@@ -463,6 +485,16 @@
   // ---------------------------------------------------------------------------
 
   async function openMarkdownModal(relPath, docType = 'info') {
+    const textarea = document.getElementById('md-textarea');
+    if (textarea && activeModalNodeRelPath && textarea.value !== lastSavedContent) {
+      await saveMarkdownToDisk();
+    }
+
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+
     activeModalNodeRelPath = relPath;
     activeDocType = docType;
 
@@ -470,7 +502,6 @@
     const titleEl = document.getElementById('md-modal-title');
     const pathEl = document.getElementById('md-modal-path');
     const iconEl = document.getElementById('md-modal-icon');
-    const textarea = document.getElementById('md-textarea');
     const previewEl = document.getElementById('md-rendered-view');
 
     const filename = docType === 'info' ? 'info.md' : 'notes.md';
@@ -505,6 +536,8 @@
     }
 
     textarea.value = content;
+    lastSavedContent = content;
+    setAutosaveStatus('saved');
     renderMarkdownContent(content, previewEl);
     switchEditorMode('preview');
 
@@ -512,6 +545,10 @@
   }
 
   function closeMarkdownModal() {
+    const textarea = document.getElementById('md-textarea');
+    if (textarea && textarea.value !== lastSavedContent) {
+      saveMarkdownToDisk();
+    }
     document.getElementById('markdown-modal-overlay').classList.remove('open');
   }
 
@@ -548,6 +585,9 @@
       btnEdit.classList.remove('active');
       editorView.style.display = 'none';
       previewView.style.display = 'block';
+      if (textarea.value !== lastSavedContent) {
+        saveMarkdownToDisk();
+      }
       renderMarkdownContent(textarea.value, previewView);
     }
   }
@@ -581,35 +621,84 @@
     }
   }
 
-  async function saveMarkdownToDisk() {
+  function setAutosaveStatus(state) {
+    const el = document.getElementById('autosave-status');
+    const textEl = document.getElementById('autosave-text');
+    if (!el || !textEl) return;
+
+    el.classList.remove('saving', 'saved', 'error');
+
+    if (state === 'saving') {
+      el.classList.add('saving');
+      textEl.textContent = 'Saving...';
+    } else if (state === 'saved') {
+      el.classList.add('saved');
+      textEl.textContent = 'Saved';
+    } else if (state === 'error') {
+      el.classList.add('error');
+      textEl.textContent = 'Save failed';
+    }
+  }
+
+  function scheduleAutoSave() {
     const textarea = document.getElementById('md-textarea');
-    const btnSave = document.getElementById('btn-save-markdown');
+    if (!textarea) return;
+
+    if (textarea.value === lastSavedContent) {
+      setAutosaveStatus('saved');
+      return;
+    }
+
+    setAutosaveStatus('saving');
+
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+
+    autoSaveTimer = setTimeout(() => {
+      saveMarkdownToDisk();
+    }, 600);
+  }
+
+  async function saveMarkdownToDisk() {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+
+    const textarea = document.getElementById('md-textarea');
+    if (!textarea) return;
+
     const content = textarea.value;
     const relPath = activeModalNodeRelPath;
-    const filename = activeDocType === 'info' ? 'info.md' : 'notes.md';
-    const endpoint = activeDocType === 'info' ? '/api/save-info' : '/api/save-notes';
+    const docType = activeDocType;
+    const filename = docType === 'info' ? 'info.md' : 'notes.md';
+    const endpoint = docType === 'info' ? '/api/save-info' : '/api/save-notes';
 
-    if (btnSave) {
-      btnSave.disabled = true;
-      btnSave.textContent = '💾 Saving...';
+    if (content === lastSavedContent && !isSavingMarkdown) {
+      setAutosaveStatus('saved');
+      return;
     }
+
+    if (isSavingMarkdown) {
+      scheduleAutoSave();
+      return;
+    }
+
+    isSavingMarkdown = true;
+    setAutosaveStatus('saving');
 
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: relPath, content: content })
+        body: JSON.stringify({ path: relPath, content: content, file: filename })
       });
 
       if (res.ok) {
         const data = await res.json();
-        if (btnSave) {
-          btnSave.textContent = '✓ Saved!';
-          setTimeout(() => {
-            btnSave.textContent = '💾 Save to Disk';
-            btnSave.disabled = false;
-          }, 1500);
-        }
+        lastSavedContent = content;
+        setAutosaveStatus('saved');
 
         if (data.node) {
           nodeCache[relPath] = data.node;
@@ -618,25 +707,19 @@
           }
         }
 
-        if (activeDocType === 'info') {
+        if (docType === 'info') {
           loadNodeOnDemand(getCurrentRelPath(), true);
         }
       } else {
-        if (btnSave) {
-          btnSave.textContent = '⚠️ Save Failed';
-          setTimeout(() => {
-            btnSave.textContent = '💾 Save to Disk';
-            btnSave.disabled = false;
-          }, 2000);
-        }
+        setAutosaveStatus('error');
       }
     } catch (err) {
-      if (btnSave) {
-        btnSave.textContent = '⚠️ Error';
-        setTimeout(() => {
-          btnSave.textContent = '💾 Save to Disk';
-          btnSave.disabled = false;
-        }, 2000);
+      console.warn('Auto-save error:', err);
+      setAutosaveStatus('error');
+    } finally {
+      isSavingMarkdown = false;
+      if (textarea && textarea.value !== lastSavedContent) {
+        scheduleAutoSave();
       }
     }
   }
@@ -668,6 +751,7 @@
 
     textarea.setRangeText(replacement, start, end, 'end');
     textarea.focus();
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   // ---------------------------------------------------------------------------
@@ -1560,6 +1644,17 @@
       };
     }
 
+    // Auto-save on textarea input and blur
+    const mdTextarea = document.getElementById('md-textarea');
+    if (mdTextarea) {
+      mdTextarea.addEventListener('input', scheduleAutoSave);
+      mdTextarea.addEventListener('blur', () => {
+        if (mdTextarea.value !== lastSavedContent) {
+          saveMarkdownToDisk();
+        }
+      });
+    }
+
     // Modal controls: info.md & notes.md
     const btnCloseMd = document.getElementById('btn-close-markdown');
     if (btnCloseMd) btnCloseMd.onclick = closeMarkdownModal;
@@ -1591,6 +1686,24 @@
 
     const btnSaveMd = document.getElementById('btn-save-markdown');
     if (btnSaveMd) btnSaveMd.onclick = saveMarkdownToDisk;
+
+    // Window beforeunload auto-save flush
+    window.addEventListener('beforeunload', () => {
+      const textarea = document.getElementById('md-textarea');
+      if (textarea && textarea.value !== lastSavedContent && activeModalNodeRelPath) {
+        const filename = activeDocType === 'info' ? 'info.md' : 'notes.md';
+        const endpoint = activeDocType === 'info' ? '/api/save-info' : '/api/save-notes';
+        const payload = JSON.stringify({ path: activeModalNodeRelPath, content: textarea.value, file: filename });
+        try {
+          fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+          });
+        } catch (e) {}
+      }
+    });
 
     // Formatting tools
     document.querySelectorAll('.btn-tool').forEach(btn => {
@@ -1654,13 +1767,18 @@
       };
     }
 
-    // Keyboard Shortcuts (Ctrl+S / Cmd+S)
+    // Keyboard Shortcuts (Ctrl+S / Cmd+S, Escape)
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         const modal = document.getElementById('markdown-modal-overlay');
         if (modal && modal.classList.contains('open')) {
           e.preventDefault();
           saveMarkdownToDisk();
+        }
+      } else if (e.key === 'Escape') {
+        const modal = document.getElementById('markdown-modal-overlay');
+        if (modal && modal.classList.contains('open')) {
+          closeMarkdownModal();
         }
       }
     });

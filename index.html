@@ -74,6 +74,7 @@
       <div class="full-graph-toolbar">
         <div class="full-graph-legend">
           <span class="legend-item"><span class="legend-dot status-completed"></span> Completed</span>
+          <span class="legend-item"><span class="legend-dot status-needs-review"></span> Needs Review</span>
           <span class="legend-item"><span class="legend-dot status-in-progress"></span> In Progress</span>
           <span class="legend-item"><span class="legend-dot status-todo"></span> To Do</span>
           <span class="legend-item"><span class="legend-symbol">⑂</span> Branch Hub</span>
@@ -124,7 +125,10 @@
             <button class="btn-tab" id="btn-tab-edit">✏️ Edit</button>
           </div>
 
-          <button class="btn-save-disk" id="btn-save-markdown">💾 Save to Disk</button>
+          <div class="autosave-status saved" id="autosave-status" title="Edits are automatically saved">
+            <span class="autosave-dot"></span>
+            <span class="autosave-text" id="autosave-text">Saved</span>
+          </div>
           <button class="summary-modal-close" id="btn-close-markdown" title="Close window">&times;</button>
         </div>
       </div>
@@ -141,7 +145,7 @@
             <button type="button" class="btn-tool" data-tool="math" title="Math Formula">$Math$</button>
             <button type="button" class="btn-tool" data-tool="list" title="Bullet List">• List</button>
             <button type="button" class="btn-tool" data-tool="check" title="Task List">☑ Task</button>
-            <span class="editor-shortcut-hint">Ctrl+S to save</span>
+            <span class="editor-shortcut-hint">Auto-saved</span>
           </div>
           <textarea class="summary-editor-textarea" id="md-textarea" spellcheck="false" placeholder="Write markdown content..."></textarea>
         </div>
