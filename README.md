@@ -5,6 +5,8 @@
 [![Dependencies: None](https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Stdlib)-green.svg)](requirements.txt)
 [![Offline First](https://img.shields.io/badge/Offline-100%25%20Self--Contained-success.svg)](libs/)
 
+*Knowledge grows farther and deeper through time.*
+
 A lightweight, offline-first, **Directory-as-Graph** visual knowledge platform and progressive learning roadmap engine. Built with vanilla JavaScript, HTML5 Canvas, and a pure Python standard-library backend.
 
 ---
