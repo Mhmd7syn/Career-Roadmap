@@ -343,6 +343,122 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             "children": children
         }
 
+    def _extract_notes_dfs(self, folder: Path, depth: int = 0, visited_ancestors: set = None) -> list[dict]:
+        """
+        Pre-order Depth-First Search traversal gathering notes.md from folder and all nested descendants.
+        Sequence: Active station first, then recursively traverses each child branch in alphabetical order.
+        """
+        if visited_ancestors is None:
+            visited_ancestors = set()
+
+        rel_path = folder.relative_to(GRAPH_DIR).as_posix() if folder != GRAPH_DIR else ""
+        canonical_folder, is_shortcut, canonical_rel = self._resolve_shortcut(folder)
+
+        default_title = folder.name.replace("-", " ").replace("_", " ").title() if rel_path else "Root"
+        info_file = canonical_folder / "info.md"
+        notes_file = canonical_folder / "notes.md"
+
+        title, badge, status = self._parse_info_md(info_file, default_title)
+
+        notes_content = ""
+        has_notes = False
+        if notes_file.exists() and notes_file.is_file():
+            try:
+                with open(notes_file, "r", encoding="utf-8") as f:
+                    notes_content = f.read().strip()
+                if notes_content:
+                    has_notes = True
+            except Exception as e:
+                print(f"[Warning reading notes {notes_file}]: {e}", file=sys.stderr)
+
+        anchor = re.sub(r"[^a-zA-Z0-9_\-]+", "-", f"{rel_path or 'root'}-{title.lower()}").strip("-")
+
+        # 1. Pre-order DFS: Include active node first
+        results = [{
+            "id": folder.name if rel_path else "root",
+            "title": title,
+            "badge": badge,
+            "status": status,
+            "relPath": rel_path,
+            "canonicalRelPath": canonical_rel if is_shortcut else rel_path,
+            "isShortcut": is_shortcut,
+            "depth": depth,
+            "notes": notes_content,
+            "hasNotes": has_notes,
+            "anchor": anchor
+        }]
+
+        # 2. Descendants: Traverse children in alphabetical order recursively
+        canonical_resolved = canonical_folder.resolve()
+        if canonical_resolved not in visited_ancestors:
+            next_ancestors = visited_ancestors | {canonical_resolved}
+            if canonical_folder.exists() and canonical_folder.is_dir():
+                subdirs = [d for d in canonical_folder.iterdir() if d.is_dir() and not d.name.startswith((".", "__"))]
+                for d in sorted(subdirs, key=lambda x: x.name.lower()):
+                    results.extend(self._extract_notes_dfs(d, depth + 1, next_ancestors))
+
+        return results
+
+    def _compile_extracted_markdown(self, items: list[dict]) -> tuple[str, list[dict]]:
+        """
+        Compile DFS extracted notes items into a single coherent Markdown document
+        with normalized heading hierarchy and table of contents metadata.
+        """
+        doc_lines = []
+        toc = []
+
+        for item in items:
+            title = item["title"]
+            depth = item["depth"]
+            notes = item["notes"]
+            anchor = item["anchor"]
+            has_notes = item["hasNotes"]
+
+            # Heading level scaled by depth (depth 0 is level 1 '#', depth 1 is level 2 '##', capped at 6)
+            heading_level = min(depth + 1, 6)
+            h_prefix = "#" * heading_level
+
+            toc.append({
+                "title": title,
+                "depth": heading_level,
+                "anchor": anchor,
+                "hasNotes": has_notes,
+                "relPath": item["relPath"]
+            })
+
+            doc_lines.append(f'<a id="{anchor}"></a>\n')
+            doc_lines.append(f"{h_prefix} {title}\n")
+
+            if has_notes:
+                lines = notes.splitlines()
+                start_idx = 0
+                while start_idx < len(lines) and not lines[start_idx].strip():
+                    start_idx += 1
+
+                # If first line is a redundant # Title, skip it
+                if start_idx < len(lines):
+                    first_line = lines[start_idx].strip()
+                    if first_line.startswith("# ") and (first_line[2:].strip().lower() == title.lower() or heading_level > 1):
+                        start_idx += 1
+
+                adjusted_lines = []
+                for line in lines[start_idx:]:
+                    m_head = re.match(r"^(#{1,6})\s+(.*)$", line)
+                    if m_head:
+                        orig_level = len(m_head.group(1))
+                        new_level = min(heading_level + orig_level, 6)
+                        adjusted_lines.append(f"{'#' * new_level} {m_head.group(2)}")
+                    else:
+                        adjusted_lines.append(line)
+
+                doc_lines.append("\n".join(adjusted_lines))
+            else:
+                doc_lines.append("*No personal study notes recorded for this station yet.*")
+
+            doc_lines.append("\n\n---\n")
+
+        return "\n".join(doc_lines), toc
+
     def _find_next_node_bfs(self, start_dir: Path) -> dict:
         """
         BFS from start_dir returning the next uncompleted station:
@@ -681,6 +797,11 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._handle_api_get_stations()
             return
 
+        # 7. API: Pre-order DFS Consolidated Notes Extraction
+        if path == "/api/extract-notes":
+            self._handle_api_extract_notes(parsed.query)
+            return
+
         # Fallback graph
         if path in ("/api/graph", "/api/graph/"):
             self._handle_api_get_root()
@@ -801,6 +922,31 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(200, {
                 "status": "ok",
                 "tree": tree
+            })
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_api_extract_notes(self, query_string: str):
+        """API handler for pre-order DFS notes extraction into consolidated markdown."""
+        params = urllib.parse.parse_qs(query_string)
+        node_path_param = params.get("path", [""])[0]
+
+        try:
+            node_dir = self._resolve_graph_folder(node_path_param)
+            items = self._extract_notes_dfs(node_dir)
+            markdown_doc, toc = self._compile_extracted_markdown(items)
+
+            root_title = items[0]["title"] if items else "Study Notes"
+            notes_count = sum(1 for it in items if it["hasNotes"])
+
+            self._send_json(200, {
+                "success": True,
+                "rootTitle": root_title,
+                "relPath": node_path_param,
+                "stationCount": len(items),
+                "notesCount": notes_count,
+                "markdown": markdown_doc,
+                "toc": toc
             })
         except Exception as e:
             self._send_json(400, {"error": str(e)})

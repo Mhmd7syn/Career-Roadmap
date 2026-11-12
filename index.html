@@ -119,6 +119,9 @@
             <button class="btn-doc-tab" id="btn-doc-notes" title="View & edit notes.md">📝 Notes</button>
           </div>
 
+          <!-- Extract Button: Appears only when viewing notes -->
+          <button type="button" class="btn-doc-extract" id="btn-doc-extract" style="display: none;" title="Extract all descendant notes into a consolidated view or PDF">📑 Extract Notes</button>
+
           <!-- Mode Tabs: Rendered vs Edit -->
           <div class="summary-mode-tabs">
             <button class="btn-tab active" id="btn-tab-preview">👁️ Rendered</button>
@@ -224,6 +227,43 @@
           </div>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Consolidated Notes Extraction & Export (DFS) -->
+  <div class="summary-modal-overlay" id="extract-modal-overlay" style="display: none;">
+    <div class="summary-modal extract-modal" id="extract-modal">
+      <div class="summary-modal-header extract-modal-header">
+        <div class="summary-header-left">
+          <span class="summary-modal-icon">📑</span>
+          <div>
+            <h2 class="summary-modal-title" id="extract-modal-title">Consolidated Study Notes</h2>
+            <span class="summary-modal-path" id="extract-modal-path">Pre-order DFS Summary</span>
+          </div>
+        </div>
+
+        <div class="extract-header-controls">
+          <span class="extract-stats-badge" id="extract-stats-badge">0 stations</span>
+          <button type="button" class="btn-extract-action btn-extract-pdf" id="btn-extract-pdf" title="Print or Save as PDF via browser print dialog">🖨️ Save as PDF</button>
+          <button type="button" class="btn-extract-action btn-extract-markdown" id="btn-extract-markdown" title="Download aggregated Markdown document (.md)">💾 Download .md</button>
+          <button type="button" class="btn-modal-close" id="btn-extract-close" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+
+      <div class="extract-modal-body">
+        <aside class="extract-toc-sidebar" id="extract-toc-sidebar">
+          <div class="extract-toc-header">Table of Contents</div>
+          <nav class="extract-toc-nav" id="extract-toc-nav"></nav>
+        </aside>
+
+        <div class="extract-content-area" id="extract-content-area">
+          <div class="extract-loading-state" id="extract-loading-state" style="display: none;">
+            <div class="extract-spinner"></div>
+            <span>Traversing tree and compiling study notes...</span>
+          </div>
+          <article class="extract-markdown-body markdown-body" id="extract-markdown-body"></article>
+        </div>
+      </div>
     </div>
   </div>
 

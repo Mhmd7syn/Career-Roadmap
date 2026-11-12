@@ -555,6 +555,7 @@
   function updateDocSwitchTabs(docType) {
     const btnInfo = document.getElementById('btn-doc-info');
     const btnNotes = document.getElementById('btn-doc-notes');
+    const btnExtract = document.getElementById('btn-doc-extract');
     if (!btnInfo || !btnNotes) return;
 
     if (docType === 'info') {
@@ -563,6 +564,10 @@
     } else {
       btnNotes.classList.add('active');
       btnInfo.classList.remove('active');
+    }
+
+    if (btnExtract) {
+      btnExtract.style.display = docType === 'notes' ? 'inline-flex' : 'none';
     }
   }
 
@@ -992,6 +997,112 @@
     } catch (err) {
       statusEl.textContent = 'Error contacting disk server';
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 8b. Consolidated Notes Extraction Modal (Pre-order DFS)
+  // ---------------------------------------------------------------------------
+
+  let currentExtractedData = null;
+
+  async function openExtractModal(relPath = '') {
+    const overlay = document.getElementById('extract-modal-overlay');
+    const modalTitle = document.getElementById('extract-modal-title');
+    const modalPath = document.getElementById('extract-modal-path');
+    const statsBadge = document.getElementById('extract-stats-badge');
+    const tocNav = document.getElementById('extract-toc-nav');
+    const markdownBody = document.getElementById('extract-markdown-body');
+    const loadingState = document.getElementById('extract-loading-state');
+    const btnExtract = document.getElementById('btn-parent-extract');
+
+    if (!overlay || !markdownBody) return;
+
+    overlay.style.display = 'flex';
+    setTimeout(() => overlay.classList.add('open'), 10);
+
+    if (loadingState) loadingState.style.display = 'flex';
+    markdownBody.innerHTML = '';
+    if (tocNav) tocNav.innerHTML = '';
+    if (btnExtract) btnExtract.disabled = true;
+
+    try {
+      const res = await fetch(`/api/extract-notes?path=${encodeURIComponent(relPath)}`, { cache: 'no-store' });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to extract notes');
+      }
+
+      const data = await res.json();
+      currentExtractedData = data;
+
+      if (modalTitle) modalTitle.textContent = `Consolidated Notes — ${data.rootTitle}`;
+      if (modalPath) modalPath.textContent = data.relPath ? `Root: ${data.relPath}` : 'Entire Knowledge Graph';
+      if (statsBadge) statsBadge.textContent = `${data.notesCount} with notes / ${data.stationCount} stations`;
+
+      // Render Markdown content (with math & code)
+      renderMarkdownContent(data.markdown, markdownBody);
+
+      // Build Table of Contents
+      if (tocNav && data.toc) {
+        let tocHtml = '<ul class="extract-toc-list">';
+        data.toc.forEach(item => {
+          const depthClass = `toc-depth-${item.depth}`;
+          const noteClass = item.hasNotes ? 'has-notes' : 'no-notes';
+          tocHtml += `
+            <li class="extract-toc-item ${depthClass} ${noteClass}">
+              <a href="#${item.anchor}" class="extract-toc-link" title="${escapeHtml(item.title)}">
+                <span class="toc-bullet">${item.hasNotes ? '•' : '○'}</span>
+                <span class="toc-text">${escapeHtml(item.title)}</span>
+              </a>
+            </li>
+          `;
+        });
+        tocHtml += '</ul>';
+        tocNav.innerHTML = tocHtml;
+
+        // Smooth scroll for TOC links
+        tocNav.querySelectorAll('.extract-toc-link').forEach(link => {
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const targetId = link.getAttribute('href').slice(1);
+            const targetAnchor = document.getElementById(targetId) || markdownBody.querySelector(`[id="${targetId}"]`);
+            if (targetAnchor) {
+              targetAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          });
+        });
+      }
+    } catch (err) {
+      console.error('Extraction error:', err);
+      markdownBody.innerHTML = `<div style="color: #f85149; padding: 20px;">⚠️ Failed to extract study notes: ${escapeHtml(err.message)}</div>`;
+    } finally {
+      if (loadingState) loadingState.style.display = 'none';
+      if (btnExtract) btnExtract.disabled = false;
+    }
+  }
+
+  function closeExtractModal() {
+    const overlay = document.getElementById('extract-modal-overlay');
+    if (overlay) {
+      overlay.classList.remove('open');
+      setTimeout(() => {
+        overlay.style.display = 'none';
+      }, 200);
+    }
+  }
+
+  function downloadExtractedMarkdown() {
+    if (!currentExtractedData || !currentExtractedData.markdown) return;
+    const filename = `${(currentExtractedData.rootTitle || 'study-notes').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-notes.md`;
+    const blob = new Blob([currentExtractedData.markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   // ---------------------------------------------------------------------------
@@ -1767,6 +1878,30 @@
       };
     }
 
+    // Extract Modal Controls
+    const btnDocExtract = document.getElementById('btn-doc-extract');
+    if (btnDocExtract) {
+      btnDocExtract.onclick = () => {
+        openExtractModal(activeModalNodeRelPath || (currentNode && currentNode.relPath) || '');
+      };
+    }
+
+    const btnExtractClose = document.getElementById('btn-extract-close');
+    if (btnExtractClose) btnExtractClose.onclick = closeExtractModal;
+
+    const btnExtractPdf = document.getElementById('btn-extract-pdf');
+    if (btnExtractPdf) btnExtractPdf.onclick = () => window.print();
+
+    const btnExtractMd = document.getElementById('btn-extract-markdown');
+    if (btnExtractMd) btnExtractMd.onclick = downloadExtractedMarkdown;
+
+    const extractOverlay = document.getElementById('extract-modal-overlay');
+    if (extractOverlay) {
+      extractOverlay.onclick = (e) => {
+        if (e.target.id === 'extract-modal-overlay') closeExtractModal();
+      };
+    }
+
     // Keyboard Shortcuts (Ctrl+S / Cmd+S, Escape)
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -1779,6 +1914,10 @@
         const modal = document.getElementById('markdown-modal-overlay');
         if (modal && modal.classList.contains('open')) {
           closeMarkdownModal();
+        }
+        const extractModal = document.getElementById('extract-modal-overlay');
+        if (extractModal && extractModal.classList.contains('open')) {
+          closeExtractModal();
         }
       }
     });
