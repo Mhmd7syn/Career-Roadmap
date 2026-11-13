@@ -331,6 +331,59 @@ class TestPriorityRecommendation(unittest.TestCase):
             q_state3 = json.load(f)
         self.assertEqual(q_state3["current_index"], 1)  # Index kept at 1, not corrupted!
 
+    def test_opening_new_node_retries_process_without_mutating_global_index(self):
+        """
+        Verify:
+        When opening a new node, recommendation retries the selection process fresh from current_index:
+        1. Evaluates candidates under the opened node.
+        2. Falls back to next priority if needed priority is absent under this node.
+        3. Never mutates or advances the global current_index on read queries.
+        4. Navigating back or to another node retries fresh from the unmodified global current_index.
+        """
+        base = self.test_graph_dir / "retry_scope_test"
+        base.mkdir(parents=True, exist_ok=True)
+        (base / "info.md").write_text("# Retry Test\n\n**Status:** completed\n", encoding="utf-8")
+
+        # Root has High node
+        h_dir = base / "high_station"
+        h_dir.mkdir(parents=True, exist_ok=True)
+        (h_dir / "info.md").write_text("# High Station\n\n**Status:** todo\n**Priority:** high\n", encoding="utf-8")
+
+        # Sub-folder only has Normal nodes (no High nodes)
+        sub_dir = base / "normal_only_folder"
+        sub_dir.mkdir(parents=True, exist_ok=True)
+        (sub_dir / "info.md").write_text("# Normal Only Folder\n\n**Status:** completed\n", encoding="utf-8")
+
+        n_dir = sub_dir / "norm_child"
+        n_dir.mkdir(parents=True, exist_ok=True)
+        (n_dir / "info.md").write_text("# Norm Child\n\n**Status:** todo\n**Priority:** normal\n", encoding="utf-8")
+
+        # Reset queue to current_index = 0
+        handler = GraphRequestHandler.__new__(GraphRequestHandler)
+        handler._save_recommendation_queue({"pattern": ["high", "normal", "low", "high", "normal", "high"], "current_index": 0})
+
+        # 1. At root: current_index is 0 (high), high_station is available -> recommends high_station
+        p_root = urllib.parse.quote("retry_scope_test")
+        _, r_data = self._get(f"/api/next-node?path={p_root}")
+        self.assertEqual(r_data["node"]["id"], "high_station")
+        self.assertEqual(r_data["node"]["priority"], "high")
+
+        # 2. Open normal_only_folder: retries process under normal_only_folder.
+        # High is absent under normal_only_folder -> retries next priority in-memory and finds norm_child.
+        p_sub = urllib.parse.quote("retry_scope_test/normal_only_folder")
+        _, sub_data = self._get(f"/api/next-node?path={p_sub}")
+        self.assertEqual(sub_data["node"]["id"], "norm_child")
+        self.assertEqual(sub_data["node"]["priority"], "normal")
+
+        # 3. Global queue file was NOT mutated: current_index is STILL 0!
+        q_state = handler._load_recommendation_queue()
+        self.assertEqual(q_state["current_index"], 0)
+
+        # 4. Opening root again retries fresh from current_index = 0 -> recommends high_station again!
+        _, r_data2 = self._get(f"/api/next-node?path={p_root}")
+        self.assertEqual(r_data2["node"]["id"], "high_station")
+        self.assertEqual(r_data2["node"]["priority"], "high")
+
     def test_queue_refreshed_after_priority_edit(self):
         """
         Verify:
@@ -364,7 +417,7 @@ class TestPriorityRecommendation(unittest.TestCase):
         _, next_data = self._get(f"/api/next-node?path={p_path}&step=0")
         self.assertEqual(next_data["node"]["id"], "node_beta")
         self.assertEqual(next_data["node"]["priority"], "high")
-        self.assertEqual(next_data["cycleSlot"], "high 1")
+        self.assertEqual(next_data["cycleSlot"], "high")
 
     def test_queue_refreshed_after_adding_new_node(self):
         """
@@ -394,7 +447,7 @@ class TestPriorityRecommendation(unittest.TestCase):
     def test_cadence_last_completed_and_next_slot_tracking(self):
         """
         Verify the progression of last_completed and next_slot:
-        high 1 -> normal 1 -> low 1 -> high 2 -> normal 2 -> high 3 -> high 1.
+        high -> normal -> low -> high -> normal -> high.
         """
         sandbox = self.test_graph_dir / "cadence_test"
         sandbox.mkdir(parents=True, exist_ok=True)
@@ -417,59 +470,60 @@ class TestPriorityRecommendation(unittest.TestCase):
 
         p_path = urllib.parse.quote("cadence_test")
 
-        # 1. Initially at step 0 (target: high 1)
+        # 1. Initially at step 0 (target: high)
         _, d0 = self._get(f"/api/next-node?path={p_path}")
-        self.assertEqual(d0["cycleSlot"], "high 1")
+        self.assertEqual(d0["cycleSlot"], "high")
         self.assertEqual(d0["node"]["id"], "h_1")
 
-        # 2. Complete h_1 -> last_completed is 'high 1', next is 'normal 1'
+        # 2. Complete h_1 -> last_completed is 'high', next is 'normal'
         self._post("/api/save-status", {"path": "cadence_test/h_1", "status": "completed"})
         _, d1 = self._get(f"/api/next-node?path={p_path}")
-        self.assertEqual(d1["lastCompletedSlot"], "high 1")
-        self.assertEqual(d1["cycleSlot"], "normal 1")
+        self.assertEqual(d1["lastCompletedSlot"], "high")
+        self.assertEqual(d1["cycleSlot"], "normal")
         self.assertEqual(d1["node"]["id"], "n_1")
 
-        # 3. Complete n_1 -> last_completed is 'normal 1', next is 'low 1'
+        # 3. Complete n_1 -> last_completed is 'normal', next is 'low'
         self._post("/api/save-status", {"path": "cadence_test/n_1", "status": "completed"})
         _, d2 = self._get(f"/api/next-node?path={p_path}")
-        self.assertEqual(d2["lastCompletedSlot"], "normal 1")
-        self.assertEqual(d2["cycleSlot"], "low 1")
+        self.assertEqual(d2["lastCompletedSlot"], "normal")
+        self.assertEqual(d2["cycleSlot"], "low")
         self.assertEqual(d2["node"]["id"], "l_1")
 
-        # 4. Complete l_1 -> last_completed is 'low 1', next is 'high 2'
+        # 4. Complete l_1 -> last_completed is 'low', next is 'high'
         self._post("/api/save-status", {"path": "cadence_test/l_1", "status": "completed"})
         _, d3 = self._get(f"/api/next-node?path={p_path}")
-        self.assertEqual(d3["lastCompletedSlot"], "low 1")
-        self.assertEqual(d3["cycleSlot"], "high 2")
+        self.assertEqual(d3["lastCompletedSlot"], "low")
+        self.assertEqual(d3["cycleSlot"], "high")
         self.assertEqual(d3["node"]["id"], "h_2")
 
-        # 5. Complete h_2 -> last_completed is 'high 2', next is 'normal 2'
+        # 5. Complete h_2 -> last_completed is 'high', next is 'normal'
         self._post("/api/save-status", {"path": "cadence_test/h_2", "status": "completed"})
         _, d4 = self._get(f"/api/next-node?path={p_path}")
-        self.assertEqual(d4["lastCompletedSlot"], "high 2")
-        self.assertEqual(d4["cycleSlot"], "normal 2")
+        self.assertEqual(d4["lastCompletedSlot"], "high")
+        self.assertEqual(d4["cycleSlot"], "normal")
         self.assertEqual(d4["node"]["id"], "n_2")
 
-        # 6. Complete n_2 -> last_completed is 'normal 2', next is 'high 3'
+        # 6. Complete n_2 -> last_completed is 'normal', next is 'high'
         self._post("/api/save-status", {"path": "cadence_test/n_2", "status": "completed"})
         _, d5 = self._get(f"/api/next-node?path={p_path}")
-        self.assertEqual(d5["lastCompletedSlot"], "normal 2")
-        self.assertEqual(d5["cycleSlot"], "high 3")
+        self.assertEqual(d5["lastCompletedSlot"], "normal")
+        self.assertEqual(d5["cycleSlot"], "high")
         self.assertEqual(d5["node"]["id"], "h_3")
 
         # 7. Complete h_3 -> all completed
         self._post("/api/save-status", {"path": "cadence_test/h_3", "status": "completed"})
         _, d6 = self._get(f"/api/next-node?path={p_path}")
         self.assertTrue(d6.get("allCompleted"))
-        self.assertEqual(d6["lastCompletedSlot"], "high 3")
-        self.assertEqual(d6["nextSlot"], "normal 1")
+        self.assertEqual(d6["lastCompletedSlot"], "high")
+        self.assertEqual(d6["nextSlot"], "normal")
 
     def test_ui_markup_and_css_priority_support(self):
         html = (BASE_DIR / "web" / "index.html").read_text(encoding="utf-8")
         css = (BASE_DIR / "web" / "style.css").read_text(encoding="utf-8")
         js = (BASE_DIR / "web" / "app.js").read_text(encoding="utf-8")
 
-        self.assertIn('id="next-node-priority"', html)
+        self.assertIn('id="next-node-pill"', html)
+        self.assertIn('id="next-node-title"', html)
         self.assertIn('id="md-modal-priority"', html)
 
         self.assertIn(".next-node-priority-badge", css)
@@ -480,11 +534,10 @@ class TestPriorityRecommendation(unittest.TestCase):
         self.assertIn("priority-normal", css)
         self.assertIn("priority-low", css)
 
-        self.assertIn("next-node-priority-badge", js)
+        self.assertIn("next-node-pill", js)
         self.assertIn("child-priority-badge", js)
         self.assertIn("btn-priority-toggle", js)
         self.assertIn("setNodePriority", js)
-        self.assertIn("poolCounts", js)
 
     def test_favicon_endpoint(self):
         code, _ = self._get("/favicon.ico")

@@ -570,7 +570,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         return "\n".join(doc_lines), toc
 
     CYCLE_PATTERN = ["high", "normal", "low", "high", "normal", "high"]
-    CYCLE_SLOTS = ["high 1", "normal 1", "low 1", "high 2", "normal 2", "high 3"]
+    CYCLE_SLOTS = ["high", "normal", "low", "high", "normal", "high"]
     _global_recommendation_step = 0
 
     def _get_queue_file(self) -> Path:
@@ -719,9 +719,9 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 "pattern": pattern,
                 "current_index": new_idx
             })
-            print(f"[Cadence advanced]: Completed '{node_prio}' matched needed slot {self.CYCLE_SLOTS[curr_idx]}. Index advanced to {new_idx}.")
+            print(f"[Cadence advanced]: Completed '{node_prio}' matched needed priority '{needed_prio}'. Index advanced to {new_idx}.")
         else:
-            print(f"[Cadence kept]: Completed '{node_prio}' did not match needed '{needed_prio}' (slot {self.CYCLE_SLOTS[curr_idx]}). Discarded index change.")
+            print(f"[Cadence kept]: Completed '{node_prio}' did not match needed '{needed_prio}'. Discarded index change.")
 
     def _find_next_node_bfs(self, start_dir: Path, step: int | None = None) -> dict:
         """
@@ -760,9 +760,9 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         total_candidates = len(high_cands) + len(normal_cands) + len(low_cands)
 
         if total_candidates == 0:
-            eff_slot = self.CYCLE_SLOTS[curr_idx] if curr_idx < len(self.CYCLE_SLOTS) else f"{pattern[curr_idx]} {curr_idx+1}"
-            prev_slot = self.CYCLE_SLOTS[(curr_idx - 1) % len(pattern)] if len(self.CYCLE_SLOTS) == len(pattern) else None
-            nxt_slot = self.CYCLE_SLOTS[(curr_idx + 1) % len(pattern)] if len(self.CYCLE_SLOTS) == len(pattern) else None
+            eff_slot = pattern[curr_idx]
+            prev_slot = pattern[(curr_idx - 1) % len(pattern)]
+            nxt_slot = pattern[(curr_idx + 1) % len(pattern)]
             return {
                 "found": False,
                 "isCurrentNode": False,
@@ -800,12 +800,9 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             else:
                 curr_idx = (curr_idx + 1) % len(pattern)
 
-        if step is None and curr_idx != saved_idx:
-            self._save_recommendation_queue({"pattern": pattern, "current_index": curr_idx})
-
-        cycle_slot = self.CYCLE_SLOTS[curr_idx] if curr_idx < len(self.CYCLE_SLOTS) else f"{pattern[curr_idx]} {curr_idx+1}"
-        prev_slot = self.CYCLE_SLOTS[(curr_idx - 1) % len(pattern)] if len(self.CYCLE_SLOTS) == len(pattern) else None
-        next_slot = self.CYCLE_SLOTS[(curr_idx + 1) % len(pattern)] if len(self.CYCLE_SLOTS) == len(pattern) else None
+        cycle_slot = pattern[curr_idx]
+        prev_slot = pattern[(curr_idx - 1) % len(pattern)]
+        next_slot = pattern[(curr_idx + 1) % len(pattern)]
 
         return {
             "found": True,

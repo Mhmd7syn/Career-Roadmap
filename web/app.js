@@ -404,7 +404,6 @@
     const nextPill = document.getElementById('next-node-pill');
     const nextLabel = document.getElementById('next-node-label');
     const nextTitle = document.getElementById('next-node-title');
-    const nextPriority = document.getElementById('next-node-priority');
 
     if (!nextPill) return;
 
@@ -419,48 +418,26 @@
         currentRecommendedNode = data.node;
         const node = data.node;
         const isCurrent = data.isCurrentNode;
-        const priority = node.priority || 'normal';
-        if (typeof data.cycleStep === 'number') {
-          recommendationCycleStep = data.cycleStep;
-          localStorage.setItem('kg_recommendation_cycle_step', recommendationCycleStep);
-        }
-        const stepNum = (typeof data.cycleStep === 'number' ? data.cycleStep : recommendationCycleStep) + 1;
 
         nextPill.style.display = 'inline-flex';
         nextPill.classList.remove('is-completed', 'is-needs-review');
 
-        const slotBadgeText = data.cycleSlot ? data.cycleSlot.toUpperCase() : (priority === 'normal' ? 'normal' : priority.toUpperCase());
-        if (nextPriority) {
-          nextPriority.style.display = 'inline-block';
-          nextPriority.className = `next-node-priority-badge priority-${priority}`;
-          nextPriority.textContent = slotBadgeText;
-        }
-
-        const slotInfo = data.cycleSlot ? ` [${data.cycleSlot.toUpperCase()}]` : ` [Step ${stepNum}/6]`;
-        const lastCompletedText = data.lastCompletedSlot ? ` • Last: ${data.lastCompletedSlot}` : '';
-        const nextExpectedText = data.nextSlot ? ` → Next: ${data.nextSlot}` : '';
-        const cadenceInfo = `${slotInfo}${lastCompletedText}${nextExpectedText} [3H+2N+1L Cadence]`;
-        const poolSummary = data.poolCounts
-          ? ` [Active: ${data.poolCounts.high}H/${data.poolCounts.normal}N/${data.poolCounts.low}L | Total: ${data.totalCandidates || 0}]`
-          : '';
-
         if (node.status === 'needs-review') {
           nextPill.classList.add('is-needs-review');
           nextLabel.textContent = 'Review:';
-          nextPill.title = `Needs Review [${slotBadgeText}]: ${node.title} (${node.category}) • ${cadenceInfo}${poolSummary} — click to review`;
+          nextPill.title = `Needs Review: ${node.title} (${node.category}) — click to review`;
         } else if (isCurrent) {
           nextPill.classList.add('is-current');
           nextLabel.textContent = 'Current:';
-          nextPill.title = `Current Focus [${slotBadgeText}]: ${node.title} (${node.category}) • ${cadenceInfo}${poolSummary} — click to view info.md`;
+          nextPill.title = `Current Focus: ${node.title} (${node.category}) — click to view info.md`;
         } else {
           nextPill.classList.remove('is-current');
           nextLabel.textContent = 'Next:';
-          nextPill.title = `Next to Learn [${slotBadgeText}]: ${node.title} in ${node.category} • ${cadenceInfo}${poolSummary} — click to jump`;
+          nextPill.title = `Next to Learn: ${node.title} in ${node.category} — click to jump`;
         }
         nextTitle.textContent = node.title;
       } else if (data.allCompleted) {
         currentRecommendedNode = null;
-        if (nextPriority) nextPriority.style.display = 'none';
         nextPill.style.display = 'inline-flex';
         nextPill.classList.remove('is-current');
         nextPill.classList.add('is-completed');
@@ -469,7 +446,6 @@
         nextPill.title = 'All stations in this section are completed!';
       } else {
         nextPill.style.display = 'none';
-        if (nextPriority) nextPriority.style.display = 'none';
         currentRecommendedNode = null;
       }
     } catch (e) {
