@@ -23,6 +23,7 @@
   let lastSavedContent = '';
   let isSavingMarkdown = false;
   let targetAddChildParentId = '';
+  let recommendationCycleStep = parseInt(localStorage.getItem('kg_recommendation_cycle_step') || '0', 10);
 
   // ---------------------------------------------------------------------------
   // 1. Navigation & State Accessors
@@ -132,6 +133,11 @@
   async function setNodeStatus(newStatus) {
     if (!currentNode) return;
 
+    if (newStatus === 'completed') {
+      recommendationCycleStep = (recommendationCycleStep + 1) % 6;
+      localStorage.setItem('kg_recommendation_cycle_step', recommendationCycleStep);
+    }
+
     currentNode.status = newStatus;
     const relPath = currentNode.relPath;
 
@@ -162,11 +168,12 @@
     const nextPill = document.getElementById('next-node-pill');
     const nextLabel = document.getElementById('next-node-label');
     const nextTitle = document.getElementById('next-node-title');
+    const nextPriority = document.getElementById('next-node-priority');
 
     if (!nextPill) return;
 
     try {
-      const res = await fetch(`/api/next-node?path=${encodeURIComponent(relPath)}`, { cache: 'no-store' });
+      const res = await fetch(`/api/next-node?path=${encodeURIComponent(relPath)}&step=${recommendationCycleStep}`, { cache: 'no-store' });
       if (!res.ok) return;
 
       const data = await res.json();
@@ -175,25 +182,40 @@
         currentRecommendedNode = data.node;
         const node = data.node;
         const isCurrent = data.isCurrentNode;
+        const priority = node.priority || 'normal';
+        const stepNum = (typeof data.cycleStep === 'number' ? data.cycleStep : recommendationCycleStep) + 1;
 
         nextPill.style.display = 'inline-flex';
         nextPill.classList.remove('is-completed', 'is-needs-review');
+
+        if (nextPriority) {
+          nextPriority.style.display = 'inline-block';
+          nextPriority.className = `next-node-priority-badge priority-${priority}`;
+          nextPriority.textContent = priority.toUpperCase();
+        }
+
+        const cadenceInfo = ` [Step ${stepNum}/6 • 3H+2N+1L Cadence]`;
+        const poolSummary = data.poolCounts
+          ? ` [Pool: ${data.poolCounts.high} High, ${data.poolCounts.normal} Normal, ${data.poolCounts.low} Low]`
+          : '';
+
         if (node.status === 'needs-review') {
           nextPill.classList.add('is-needs-review');
           nextLabel.textContent = 'Review:';
-          nextPill.title = `Needs Review: ${node.title} (${node.category}) — click to review`;
+          nextPill.title = `Needs Review [${priority.toUpperCase()}]: ${node.title} (${node.category})${cadenceInfo}${poolSummary} — click to review`;
         } else if (isCurrent) {
           nextPill.classList.add('is-current');
           nextLabel.textContent = 'Current:';
-          nextPill.title = `Current Focus: ${node.title} (${node.category}) — click to view info.md`;
+          nextPill.title = `Current Focus [${priority.toUpperCase()}]: ${node.title} (${node.category})${cadenceInfo}${poolSummary} — click to view info.md`;
         } else {
           nextPill.classList.remove('is-current');
           nextLabel.textContent = 'Next:';
-          nextPill.title = `Next to Learn: ${node.title} in ${node.category} — click to jump`;
+          nextPill.title = `Next to Learn [${priority.toUpperCase()}]: ${node.title} in ${node.category}${cadenceInfo}${poolSummary} — click to jump`;
         }
         nextTitle.textContent = node.title;
       } else if (data.allCompleted) {
         currentRecommendedNode = null;
+        if (nextPriority) nextPriority.style.display = 'none';
         nextPill.style.display = 'inline-flex';
         nextPill.classList.remove('is-current');
         nextPill.classList.add('is-completed');
@@ -202,6 +224,7 @@
         nextPill.title = 'All stations in this section are completed!';
       } else {
         nextPill.style.display = 'none';
+        if (nextPriority) nextPriority.style.display = 'none';
         currentRecommendedNode = null;
       }
     } catch (e) {
@@ -332,8 +355,13 @@
     }
 
     const currentStatus = currentNode.status || 'todo';
+    const currentPriority = currentNode.priority || 'normal';
     const badgeText = currentNode.badge || '';
     const isParentShortcut = currentNode.isShortcut || false;
+    const isRoot = !currentNode.relPath || currentNode.relPath === 'root';
+    const priorityBadgeHtml = !isRoot
+      ? `<span class="badge-priority priority-${currentPriority}" title="Priority: ${currentPriority}">${currentPriority.toUpperCase()}</span>`
+      : '';
     const shortcutBadgeHtml = isParentShortcut
       ? `<span class="badge-shortcut" title="Linked to ${currentNode.canonicalRelPath}">↗ Shared from ${currentNode.canonicalRelPath}</span>`
       : '';
@@ -363,6 +391,7 @@
           <button class="btn-status-cycle status-${currentStatus}" id="btn-status-toggle" title="${currentStatus === 'needs-review' ? 'Needs review after 1 month. Click to mark reviewed and completed' : 'Cycle status: To Do → In Progress → Done'}">
             ${currentStatus === 'completed' ? '● Done' : (currentStatus === 'in-progress' ? '◐ In Progress' : (currentStatus === 'needs-review' ? '⚠ Needs Review' : '○ To Do'))}
           </button>
+          ${priorityBadgeHtml}
           ${shortcutBadgeHtml}
           ${badgeText ? `<span style="font-size: 0.72rem; color: var(--accent-blue); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">${badgeText}</span>` : ''}
         </div>
@@ -427,9 +456,11 @@
 
     children.forEach((child, index) => {
       const childStatus = child.status || 'todo';
+      const childPriority = child.priority || 'normal';
       const branchBadge = child.hasChildren ? '<span class="child-branch-indicator" title="Contains sub-stations">⑂</span>' : '';
       const isChildShortcut = child.isShortcut || false;
       const shortcutIndicator = isChildShortcut ? `<span class="child-shortcut-indicator" title="Shortcut to ${child.canonicalRelPath || child.title}">↗</span>` : '';
+      const priorityBadge = `<span class="child-priority-badge priority-${childPriority}" title="Priority: ${childPriority}">${childPriority.toUpperCase()}</span>`;
 
       const nodeEl = document.createElement('div');
       nodeEl.className = `graph-child-node ${isChildShortcut ? 'is-shortcut' : ''} ${direction === 'forward' ? 'spawning' : ''}`;
@@ -446,6 +477,7 @@
         <span class="child-status-dot ${dotClass}"></span>
         <span class="child-index">${String(index + 1).padStart(2, '0')}</span>
         <span class="child-node-title" title="${child.title}">${child.title}</span>
+        ${priorityBadge}
         ${shortcutIndicator}
         ${branchBadge}
         <button class="btn-child-quick-info" title="Quick view info.md">ℹ️</button>
@@ -524,11 +556,23 @@
     const pathEl = document.getElementById('md-modal-path');
     const iconEl = document.getElementById('md-modal-icon');
     const previewEl = document.getElementById('md-rendered-view');
+    const priorityEl = document.getElementById('md-modal-priority');
 
     const filename = docType === 'info' ? 'info.md' : 'notes.md';
     titleEl.textContent = `${filename}`;
     pathEl.textContent = `graph/${relPath ? relPath + '/' : ''}${filename}`;
     iconEl.textContent = docType === 'info' ? 'ℹ️' : '📝';
+
+    if (priorityEl) {
+      const cachedNodeInitial = nodeCache[relPath];
+      if (cachedNodeInitial && cachedNodeInitial.priority) {
+        priorityEl.style.display = 'inline-block';
+        priorityEl.className = `badge-priority priority-${cachedNodeInitial.priority}`;
+        priorityEl.textContent = cachedNodeInitial.priority.toUpperCase();
+      } else {
+        priorityEl.style.display = 'none';
+      }
+    }
 
     updateDocSwitchTabs(docType);
 
@@ -547,6 +591,11 @@
         if (res.ok) {
           const data = await res.json();
           nodeCache[relPath] = data;
+          if (priorityEl && data.priority) {
+            priorityEl.style.display = 'inline-block';
+            priorityEl.className = `badge-priority priority-${data.priority}`;
+            priorityEl.textContent = data.priority.toUpperCase();
+          }
           content = docType === 'info' ? (data.info || '') : (data.notes || '');
         }
       } catch (e) {
@@ -2009,6 +2058,8 @@
         badgeHtml = `<text class="fg-shortcut-indicator" x="${node._w - 10}" y="${node._hActual / 2 + 4}" text-anchor="end" title="Shortcut to ${node.canonicalRelPath}">↗</text>`;
       } else if (hasChildren) {
         badgeHtml = `<text class="fg-hub-indicator" x="${node._w - 12}" y="${node._hActual / 2 + 4}" text-anchor="end">⑂ ${node.childCount || ''}</text>`;
+      } else if (node.priority && node.priority !== 'normal') {
+        badgeHtml = `<text class="fg-node-badge fg-priority-${node.priority}" x="${node._w - 10}" y="${node._hActual / 2 + 3}" text-anchor="end">${node.priority.toUpperCase()}</text>`;
       } else if (node.badge) {
         let bText = node.badge;
         if (bText.length > 8) bText = bText.slice(0, 7) + '…';
@@ -2019,7 +2070,7 @@
         ? `<text class="fg-current-indicator" x="${node._w - (hasChildren || isShortcut ? 38 : 10)}" y="11" text-anchor="end">CURRENT</text>`
         : '';
 
-      const tooltipText = `${node.title}\nPath: ${node.relPath || 'Root'}${isShortcut ? '\nShortcut to: ' + node.canonicalRelPath : ''}\nStatus: ${status}\n${hasChildren ? (node.childCount + ' sub-stations (' + (node.totalDescendants || 0) + ' total)') : 'Leaf Station'}`;
+      const tooltipText = `${node.title}\nPath: ${node.relPath || 'Root'}${isShortcut ? '\nShortcut to: ' + node.canonicalRelPath : ''}\nStatus: ${status}\nPriority: ${node.priority || 'normal'}\n${hasChildren ? (node.childCount + ' sub-stations (' + (node.totalDescendants || 0) + ' total)') : 'Leaf Station'}`;
 
       g.innerHTML = `
         <title>${escapeHtml(tooltipText)}</title>

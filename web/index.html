@@ -45,6 +45,7 @@
       <button class="next-node-pill" id="next-node-pill" style="display: none;" title="Next station to learn">
         <span class="next-node-icon">🎯</span>
         <span class="next-node-label" id="next-node-label">Next:</span>
+        <span class="next-node-priority-badge" id="next-node-priority" style="display: none;">HIGH</span>
         <span class="next-node-title" id="next-node-title">Station</span>
       </button>
 
@@ -107,7 +108,10 @@
         <div class="summary-header-left">
           <span class="summary-modal-icon" id="md-modal-icon">ℹ️</span>
           <div>
-            <h2 class="summary-modal-title" id="md-modal-title">info.md</h2>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h2 class="summary-modal-title" id="md-modal-title">info.md</h2>
+              <span class="badge-priority" id="md-modal-priority" style="display: none;">NORMAL</span>
+            </div>
             <span class="summary-modal-path" id="md-modal-path">graph/...</span>
           </div>
         </div>

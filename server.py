@@ -236,14 +236,15 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     pass
         return referencing
 
-    def _parse_info_md(self, info_path: Path, default_title: str) -> tuple[str, str, str]:
-        """Extract title, badge, and status from info.md, applying spaced repetition auto-decay."""
+    def _parse_info_md(self, info_path: Path, default_title: str) -> tuple[str, str, str, str]:
+        """Extract title, badge, status, and priority from info.md, applying spaced repetition auto-decay."""
         title = default_title
         badge = ""
         status = "todo"
+        priority = "normal"
 
         if not info_path.exists():
-            return title, badge, status
+            return title, badge, status, priority
 
         try:
             with open(info_path, "r", encoding="utf-8") as f:
@@ -265,6 +266,13 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     m_stat = re.search(r"status[:\*]+\s*([a-zA-Z0-9_\-]+)", stripped, re.IGNORECASE)
                     if m_stat:
                         status = m_stat.group(1).lower()
+
+                if "priority" in stripped.lower():
+                    m_prio = re.search(r"priority[:\*]+\s*([a-zA-Z0-9_\-]+)", stripped, re.IGNORECASE)
+                    if m_prio:
+                        cand_prio = m_prio.group(1).lower()
+                        if cand_prio in ("high", "normal", "low"):
+                            priority = cand_prio
 
                 if "badge" in stripped.lower():
                     m_badge = re.search(r"badge[:\*]+\s*([^|\n*]+)", stripped, re.IGNORECASE)
@@ -292,10 +300,10 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     status = "needs-review"
                     self._update_status_in_info_md(info_path, "needs-review", completed_date_str=completed_date.isoformat())
 
-            return title, badge, status
+            return title, badge, status, priority
         except Exception as e:
             print(f"[Warning parsing {info_path}]: {e}", file=sys.stderr)
-            return default_title, badge, status
+            return default_title, badge, status, priority
 
     def _scan_single_node(self, folder: Path) -> dict:
         """
@@ -310,7 +318,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         info_file = canonical_folder / "info.md"
         notes_file = canonical_folder / "notes.md"
 
-        title, badge, status = self._parse_info_md(info_file, default_title)
+        title, badge, status, priority = self._parse_info_md(info_file, default_title)
 
         # 1. Immediate subdirectories from canonical folder
         children = []
@@ -318,13 +326,14 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             subdirs = [d for d in canonical_folder.iterdir() if d.is_dir() and not d.name.startswith((".", "__"))]
             for d in sorted(subdirs, key=lambda x: x.name.lower()):
                 c_canonical, c_is_shortcut, c_target_rel = self._resolve_shortcut(d)
-                c_title, c_badge, c_status = self._parse_info_md(c_canonical / "info.md", d.name.replace("-", " ").replace("_", " ").title())
+                c_title, c_badge, c_status, c_priority = self._parse_info_md(c_canonical / "info.md", d.name.replace("-", " ").replace("_", " ").title())
                 has_subchildren = any(sd.is_dir() and not sd.name.startswith((".", "__")) for sd in c_canonical.iterdir()) if c_canonical.exists() else False
                 children.append({
                     "id": d.name,
                     "title": c_title,
                     "badge": c_badge,
                     "status": c_status,
+                    "priority": c_priority,
                     "hasChildren": has_subchildren,
                     "isShortcut": c_is_shortcut,
                     "canonicalRelPath": c_target_rel if c_is_shortcut else "",
@@ -370,6 +379,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             "title": title,
             "badge": badge,
             "status": status,
+            "priority": priority,
             "children": children,
             "extraFiles": extra_files,
             "breadcrumbs": self._build_breadcrumbs(folder),
@@ -391,7 +401,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             curr = curr / part
             c_canonical, c_is_shortcut, _ = self._resolve_shortcut(curr)
             info_file = c_canonical / "info.md"
-            title, _, _ = self._parse_info_md(info_file, part.replace("-", " ").replace("_", " ").title())
+            title, _, _, _ = self._parse_info_md(info_file, part.replace("-", " ").replace("_", " ").title())
             c_rel = curr.relative_to(GRAPH_DIR).as_posix()
             breadcrumbs.append({
                 "id": part,
@@ -411,7 +421,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         default_title = folder.name.replace("-", " ").replace("_", " ").title() if rel_path else "Knowledge Graph"
         info_file = canonical_folder / "info.md"
-        title, badge, status = self._parse_info_md(info_file, default_title)
+        title, badge, status, priority = self._parse_info_md(info_file, default_title)
 
         children = []
         canonical_resolved = canonical_folder.resolve()
@@ -431,6 +441,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             "title": title,
             "badge": badge,
             "status": status,
+            "priority": priority,
             "relPath": rel_path,
             "isShortcut": is_shortcut,
             "canonicalRelPath": canonical_rel if is_shortcut else rel_path,
@@ -456,7 +467,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         info_file = canonical_folder / "info.md"
         notes_file = canonical_folder / "notes.md"
 
-        title, badge, status = self._parse_info_md(info_file, default_title)
+        title, badge, status, priority = self._parse_info_md(info_file, default_title)
 
         notes_content = ""
         has_notes = False
@@ -477,6 +488,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             "title": title,
             "badge": badge,
             "status": status,
+            "priority": priority,
             "relPath": rel_path,
             "canonicalRelPath": canonical_rel if is_shortcut else rel_path,
             "isShortcut": is_shortcut,
@@ -557,24 +569,162 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         return "\n".join(doc_lines), toc
 
-    def _find_next_node_bfs(self, start_dir: Path) -> dict:
+    _global_recommendation_step = 0
+
+    def _load_recommendation_queue(self, scope: str = "") -> dict | None:
+        """Load persisted recommendation batch from root node folder (.recommendation_queue.json)."""
+        queue_file = GRAPH_DIR / ".recommendation_queue.json"
+        if not queue_file.exists():
+            return None
+        try:
+            with open(queue_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and "scopes" in data:
+                return data["scopes"].get(scope)
+            if isinstance(data, dict) and data.get("scope") == scope:
+                return data
+            return None
+        except Exception as e:
+            print(f"[Warning reading recommendation queue]: {e}", file=sys.stderr)
+            return None
+
+    def _save_recommendation_queue(self, scope: str, queue_data: dict):
+        """Save active recommendation batch to root node folder (.recommendation_queue.json)."""
+        queue_file = GRAPH_DIR / ".recommendation_queue.json"
+        try:
+            all_data = {"scopes": {}}
+            if queue_file.exists():
+                try:
+                    with open(queue_file, "r", encoding="utf-8") as f:
+                        existing = json.load(f)
+                        if isinstance(existing, dict) and "scopes" in existing:
+                            all_data = existing
+                        elif isinstance(existing, dict) and "scope" in existing:
+                            all_data["scopes"][existing["scope"]] = existing
+                except Exception:
+                    pass
+            all_data["scopes"][scope] = queue_data
+            with open(queue_file, "w", encoding="utf-8") as f:
+                json.dump(all_data, f, indent=2)
+        except Exception as e:
+            print(f"[Warning saving recommendation queue]: {e}", file=sys.stderr)
+
+    def _find_next_node_bfs(self, start_dir: Path, step: int = 0) -> dict:
         """
-        BFS from start_dir returning the next uncompleted station:
-        - First check start_dir itself (the current station): if uncompleted, return it as current focus.
-        - Otherwise, traverse descendants in BFS order (level by level, alphabetical)
-          and return the first station with status != 'completed'.
-        - If all descendants are completed, indicate all completed.
-        - Resolves shortcuts and tracks visited canonical paths to avoid cycles.
+        Priority-weighted recommendation engine:
+        - Reuses persisted 6-node batch from .recommendation_queue.json in root node folder across restarts.
+        - Only refills a fresh batch when all stations in the active batch are marked completed.
+        - Interleaves quota pool into 3+2+1 cadence: [High 1, Normal 1, Low 1, High 2, Normal 2, High 3].
+        - Selects candidate based on current cycle step (with graceful fallbacks).
         """
+        CYCLE_PATTERN = ["high", "normal", "low", "high", "normal", "high"]
+        step = step % 6
+
         if not start_dir.exists() or not start_dir.is_dir():
             return {
                 "found": False,
                 "isCurrentNode": False,
                 "allCompleted": False,
                 "node": None,
+                "pool": [],
+                "cycleStep": step,
+                "cycleTarget": CYCLE_PATTERN[step],
+                "cyclePattern": CYCLE_PATTERN,
+                "poolCounts": {"high": 0, "normal": 0, "low": 0},
+                "totalCandidates": 0,
                 "message": "Station directory does not exist."
             }
 
+        scope = start_dir.relative_to(GRAPH_DIR).as_posix() if start_dir != GRAPH_DIR else ""
+        existing = self._load_recommendation_queue(scope)
+
+        # 1. Reuse existing persisted batch if uncompleted stations remain
+        if existing and "slots" in existing:
+            saved_slots = existing.get("slots", [])
+            validated_slots = []
+            uncompleted_count = 0
+
+            for item in saved_slots:
+                if not item:
+                    validated_slots.append(None)
+                    continue
+
+                rel_p = item.get("relPath", "")
+                node_dir = GRAPH_DIR / rel_p if rel_p else GRAPH_DIR
+                if not node_dir.exists():
+                    validated_slots.append(None)
+                    continue
+
+                c_canon, is_sc, target_rel = self._resolve_shortcut(node_dir)
+                info_file = c_canon / "info.md"
+                default_t = node_dir.name.replace("-", " ").replace("_", " ").title() if node_dir != GRAPH_DIR else "Root"
+                t, b, s, p = self._parse_info_md(info_file, default_t)
+                breadcrumbs = self._build_breadcrumbs(node_dir)
+                category = breadcrumbs[-2]["title"] if len(breadcrumbs) > 1 else "Root"
+
+                node_obj = {
+                    "id": node_dir.name if node_dir != GRAPH_DIR else "root",
+                    "title": t,
+                    "badge": b,
+                    "status": s,
+                    "priority": p,
+                    "isShortcut": is_sc,
+                    "canonicalRelPath": target_rel if is_sc else rel_p,
+                    "relPath": rel_p,
+                    "category": category,
+                    "breadcrumbs": breadcrumbs,
+                    "isCurrentNode": (node_dir == start_dir)
+                }
+                validated_slots.append(node_obj)
+                if s != "completed":
+                    uncompleted_count += 1
+
+            if uncompleted_count > 0:
+                recommended = None
+                effective_step = step
+                for offset in range(6):
+                    check_idx = (step + offset) % 6
+                    cand = validated_slots[check_idx] if check_idx < len(validated_slots) else None
+                    if cand and cand["status"] != "completed":
+                        recommended = cand
+                        effective_step = check_idx
+                        break
+
+                if recommended is None:
+                    for cand in validated_slots:
+                        if cand and cand["status"] != "completed":
+                            recommended = cand
+                            break
+
+                active_pool = [s for s in validated_slots if s is not None and s["status"] != "completed"]
+
+                existing["slots"] = validated_slots
+                existing["step"] = effective_step
+                self._save_recommendation_queue(scope, existing)
+
+                high_count = sum(1 for s in active_pool if s.get("priority") == "high")
+                normal_count = sum(1 for s in active_pool if s.get("priority") == "normal")
+                low_count = sum(1 for s in active_pool if s.get("priority") == "low")
+
+                return {
+                    "found": True,
+                    "isCurrentNode": recommended.get("isCurrentNode", False) if recommended else False,
+                    "allCompleted": False,
+                    "node": recommended,
+                    "pool": active_pool,
+                    "cycleStep": effective_step,
+                    "cycleTarget": CYCLE_PATTERN[effective_step],
+                    "cyclePattern": CYCLE_PATTERN,
+                    "poolCounts": {
+                        "high": high_count,
+                        "normal": normal_count,
+                        "low": low_count
+                    },
+                    "totalCandidates": uncompleted_count,
+                    "isPersistedBatch": True
+                }
+
+        # 2. No active batch or previous batch fully completed -> Form fresh 3H+2N+1L batch
         def get_subdirs(d: Path) -> list[Path]:
             if not d.exists() or not d.is_dir():
                 return []
@@ -582,37 +732,52 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             return sorted(subdirs, key=lambda x: x.name.lower())
 
         canonical_start, is_start_sc, start_target_rel = self._resolve_shortcut(start_dir)
-        immediate_subdirs = get_subdirs(canonical_start)
+        visited_canonical = set()
 
-        # 1. Scoped context: Check the current node first (Root or any station)
-        info_file = canonical_start / "info.md"
-        default_title = start_dir.name.replace("-", " ").replace("_", " ").title() if start_dir != GRAPH_DIR else "Root"
-        title, badge, status = self._parse_info_md(info_file, default_title)
+        high_candidates = []
+        normal_candidates = []
+        low_candidates = []
 
-        if status != "completed":
-            breadcrumbs = self._build_breadcrumbs(start_dir)
+        def build_candidate_node(dir_path: Path, is_curr: bool) -> dict:
+            c_canon, is_sc, target_rel = self._resolve_shortcut(dir_path)
+            info_file = c_canon / "info.md"
+            default_t = dir_path.name.replace("-", " ").replace("_", " ").title() if dir_path != GRAPH_DIR else "Root"
+            t, b, s, p = self._parse_info_md(info_file, default_t)
+            breadcrumbs = self._build_breadcrumbs(dir_path)
             category = breadcrumbs[-2]["title"] if len(breadcrumbs) > 1 else "Root"
-            rel_p = start_dir.relative_to(GRAPH_DIR).as_posix() if start_dir != GRAPH_DIR else ""
+            rel_p = dir_path.relative_to(GRAPH_DIR).as_posix() if dir_path != GRAPH_DIR else ""
             return {
-                "found": True,
-                "isCurrentNode": True,
-                "allCompleted": False,
-                "node": {
-                    "id": start_dir.name if start_dir != GRAPH_DIR else "root",
-                    "title": title,
-                    "badge": badge,
-                    "status": status,
-                    "isShortcut": is_start_sc,
-                    "canonicalRelPath": start_target_rel if is_start_sc else rel_p,
-                    "relPath": rel_p,
-                    "category": category,
-                    "breadcrumbs": breadcrumbs
-                }
+                "id": dir_path.name if dir_path != GRAPH_DIR else "root",
+                "title": t,
+                "badge": b,
+                "status": s,
+                "priority": p,
+                "isShortcut": is_sc,
+                "canonicalRelPath": target_rel if is_sc else rel_p,
+                "relPath": rel_p,
+                "category": category,
+                "breadcrumbs": breadcrumbs,
+                "isCurrentNode": is_curr
             }
 
-        # 2. BFS queue over descendants (if current node is completed)
-        visited_canonical = {canonical_start.resolve()}
-        queue = deque(immediate_subdirs)
+        def bucket_candidate(cand: dict):
+            prio = cand.get("priority", "normal")
+            if prio == "high":
+                high_candidates.append(cand)
+            elif prio == "low":
+                low_candidates.append(cand)
+            else:
+                normal_candidates.append(cand)
+
+        # Scoped context: Check the current node first (if not root)
+        if start_dir != GRAPH_DIR:
+            visited_canonical.add(canonical_start.resolve())
+            curr_cand = build_candidate_node(start_dir, is_curr=True)
+            if curr_cand["status"] != "completed":
+                bucket_candidate(curr_cand)
+
+        # BFS queue over descendants
+        queue = deque(get_subdirs(canonical_start))
 
         while queue:
             curr = queue.popleft()
@@ -622,39 +787,84 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 continue
             visited_canonical.add(resolved_canon)
 
-            info_file = canonical_curr / "info.md"
-            title, badge, status = self._parse_info_md(info_file, curr.name.replace("-", " ").replace("_", " ").title())
+            desc_cand = build_candidate_node(curr, is_curr=False)
+            if desc_cand["status"] != "completed":
+                bucket_candidate(desc_cand)
 
-            if status != "completed":
-                breadcrumbs = self._build_breadcrumbs(curr)
-                category = breadcrumbs[-2]["title"] if len(breadcrumbs) > 1 else "Root"
-                curr_rel = curr.relative_to(GRAPH_DIR).as_posix() if curr.is_relative_to(GRAPH_DIR) else curr.name
-                return {
-                    "found": True,
-                    "isCurrentNode": False,
-                    "allCompleted": False,
-                    "node": {
-                        "id": curr.name,
-                        "title": title,
-                        "badge": badge,
-                        "status": status,
-                        "isShortcut": is_sc,
-                        "canonicalRelPath": target_rel if is_sc else curr_rel,
-                        "relPath": curr_rel,
-                        "category": category,
-                        "breadcrumbs": breadcrumbs
-                    }
-                }
-
-            # Enqueue children for next BFS level
             queue.extend(get_subdirs(canonical_curr))
 
+        # Quota distribution: 3 High, 2 Normal, 1 Low
+        high_pool = high_candidates[:3]
+        normal_pool = normal_candidates[:2]
+        low_pool = low_candidates[:1]
+
+        # Interleave into 6-slot 3H+2N+1L cadence: [H1, N1, L1, H2, N2, H3]
+        slots = [None] * 6
+        h_tmp = list(high_pool)
+        n_tmp = list(normal_pool)
+        l_tmp = list(low_pool)
+
+        if h_tmp: slots[0] = h_tmp.pop(0)
+        if n_tmp: slots[1] = n_tmp.pop(0)
+        if l_tmp: slots[2] = l_tmp.pop(0)
+        if h_tmp: slots[3] = h_tmp.pop(0)
+        if n_tmp: slots[4] = n_tmp.pop(0)
+        if h_tmp: slots[5] = h_tmp.pop(0)
+
+        active_pool = [s for s in slots if s is not None]
+
+        if not active_pool:
+            return {
+                "found": False,
+                "isCurrentNode": False,
+                "allCompleted": True,
+                "node": None,
+                "pool": [],
+                "cycleStep": step,
+                "cycleTarget": CYCLE_PATTERN[step],
+                "cyclePattern": CYCLE_PATTERN,
+                "poolCounts": {"high": 0, "normal": 0, "low": 0},
+                "totalCandidates": 0,
+                "message": "All stations in this section completed!"
+            }
+
+        # Select candidate for current step with graceful wrap fallback
+        recommended = None
+        effective_step = step
+        for offset in range(6):
+            check_idx = (step + offset) % 6
+            if slots[check_idx] is not None:
+                recommended = slots[check_idx]
+                effective_step = check_idx
+                break
+
+        if recommended is None:
+            recommended = active_pool[0]
+            effective_step = step
+
+        # Persist new batch to root node folder
+        self._save_recommendation_queue(scope, {
+            "scope": scope,
+            "step": effective_step,
+            "slots": slots,
+            "createdAt": datetime.now().isoformat()
+        })
+
         return {
-            "found": False,
-            "isCurrentNode": False,
-            "allCompleted": True,
-            "node": None,
-            "message": "All stations in this section completed!"
+            "found": True,
+            "isCurrentNode": recommended.get("isCurrentNode", False),
+            "allCompleted": False,
+            "node": recommended,
+            "pool": active_pool,
+            "cycleStep": effective_step,
+            "cycleTarget": CYCLE_PATTERN[effective_step],
+            "cyclePattern": CYCLE_PATTERN,
+            "poolCounts": {
+                "high": len(high_pool),
+                "normal": len(normal_pool),
+                "low": len(low_pool)
+            },
+            "totalCandidates": len(high_candidates) + len(normal_candidates) + len(low_candidates)
         }
 
     def _search_graph(self, query: str, limit: int = 30) -> tuple[list[dict], int]:
@@ -698,7 +908,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             info_file = canonical_folder / "info.md"
             notes_file = canonical_folder / "notes.md"
 
-            title, badge, status = self._parse_info_md(info_file, default_title)
+            title, badge, status, priority = self._parse_info_md(info_file, default_title)
             breadcrumbs = self._build_breadcrumbs(folder)
             category = " › ".join([b["title"] for b in breadcrumbs[:-1]]) if len(breadcrumbs) > 1 else "Root"
 
@@ -784,6 +994,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     "isShortcut": is_shortcut,
                     "canonicalRelPath": canonical_rel if is_shortcut else rel_path,
                     "status": status,
+                    "priority": priority,
                     "badge": badge,
                     "category": category,
                     "breadcrumbs": breadcrumbs,
@@ -860,6 +1071,44 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 f.write(updated)
         except Exception as e:
             print(f"[Error updating status in {info_path}]: {e}", file=sys.stderr)
+
+    def _update_priority_in_info_md(self, info_path: Path, new_priority: str):
+        valid = {"high", "normal", "low"}
+        prio = str(new_priority).lower().strip() if new_priority else "normal"
+        if prio not in valid:
+            prio = "normal"
+
+        if not info_path.exists():
+            fallback_title = info_path.parent.name.replace("-", " ").replace("_", " ").title()
+            with open(info_path, "w", encoding="utf-8") as f:
+                f.write(f"# {fallback_title}\n\n**Status:** todo\n**Priority:** {prio}\n")
+            return
+
+        try:
+            with open(info_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            pattern = re.compile(r"(\*\*Priority:\*\*\s*)([a-zA-Z0-9_\-]+)", re.IGNORECASE)
+            if pattern.search(content):
+                updated = pattern.sub(rf"\g<1>{prio}", content)
+            else:
+                pattern2 = re.compile(r"(priority:\s*)([a-zA-Z0-9_\-]+)", re.IGNORECASE)
+                if pattern2.search(content):
+                    updated = pattern2.sub(rf"\g<1>{prio}", content)
+                else:
+                    stat_match = re.search(r"(\*\*Status:\*\*[^\n]*)", content, re.IGNORECASE)
+                    if stat_match:
+                        updated = content[:stat_match.end()] + f"\n**Priority:** {prio}" + content[stat_match.end():]
+                    else:
+                        lines = content.splitlines()
+                        insert_idx = 1 if len(lines) > 1 else len(lines)
+                        lines.insert(insert_idx, f"**Priority:** {prio}")
+                        updated = "\n".join(lines)
+
+            with open(info_path, "w", encoding="utf-8") as f:
+                f.write(updated)
+        except Exception as e:
+            print(f"[Error updating priority in {info_path}]: {e}", file=sys.stderr)
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -948,7 +1197,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             info_file = canonical_path / "info.md"
             if info_file.exists():
                 try:
-                    _, _, status = self._parse_info_md(info_file, rpath.name)
+                    _, _, status, _ = self._parse_info_md(info_file, rpath.name)
                     if status == "completed":
                         completed += 1
                     elif status == "needs-review":
@@ -975,22 +1224,29 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             if (rpath / "shortcut.json").exists():
                 continue
             rel = rpath.relative_to(GRAPH_DIR).as_posix()
-            title, _, _ = self._parse_info_md(rpath / "info.md", rpath.name.replace("-", " ").replace("_", " ").title())
+            title, _, _, priority = self._parse_info_md(rpath / "info.md", rpath.name.replace("-", " ").replace("_", " ").title())
             stations.append({
                 "title": title,
-                "relPath": rel
+                "relPath": rel,
+                "priority": priority
             })
         stations.sort(key=lambda s: s["title"].lower())
         self._send_json(200, {"stations": stations})
 
     def _handle_api_get_next_node(self, query_string: str):
-        """Find the next uncompleted station using BFS from the requested node."""
+        """Find the next uncompleted station using priority-weighted BFS from the requested node."""
         params = urllib.parse.parse_qs(query_string)
         node_path_param = params.get("path", [""])[0]
+        raw_step = params.get("step", [None])[0]
+
+        if raw_step is not None and raw_step.isdigit():
+            step = int(raw_step) % 6
+        else:
+            step = getattr(GraphRequestHandler, "_global_recommendation_step", 0) % 6
 
         try:
             node_dir = self._resolve_graph_folder(node_path_param)
-            result = self._find_next_node_bfs(node_dir)
+            result = self._find_next_node_bfs(node_dir, step=step)
             self._send_json(200, result)
         except Exception as e:
             self._send_json(400, {"error": str(e)})
@@ -1068,6 +1324,8 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._handle_save_notes(payload)
         elif path == "/api/save-status":
             self._handle_save_status(payload)
+        elif path == "/api/save-priority":
+            self._handle_save_priority(payload)
         elif path == "/api/add-child":
             self._handle_add_child(payload)
         elif path == "/api/rename-node":
@@ -1086,12 +1344,32 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
     def _handle_save_info(self, payload: dict):
         raw_path = payload.get("path", "")
         content = payload.get("content", "")
+        priority = payload.get("priority")
 
         try:
             node_dir = self._resolve_graph_folder(raw_path)
             canonical_dir, _, _ = self._resolve_shortcut(node_dir)
             canonical_dir.mkdir(parents=True, exist_ok=True)
             info_file = canonical_dir / "info.md"
+
+            if priority and str(priority).lower().strip() in ("high", "normal", "low"):
+                prio = str(priority).lower().strip()
+                patt = re.compile(r"(\*\*Priority:\*\*\s*)([a-zA-Z0-9_\-]+)", re.IGNORECASE)
+                if patt.search(content):
+                    content = patt.sub(rf"\g<1>{prio}", content)
+                else:
+                    patt2 = re.compile(r"(priority:\s*)([a-zA-Z0-9_\-]+)", re.IGNORECASE)
+                    if patt2.search(content):
+                        content = patt2.sub(rf"\g<1>{prio}", content)
+                    else:
+                        stat_match = re.search(r"(\*\*Status:\*\*[^\n]*)", content, re.IGNORECASE)
+                        if stat_match:
+                            content = content[:stat_match.end()] + f"\n**Priority:** {prio}" + content[stat_match.end():]
+                        else:
+                            lines = content.splitlines()
+                            insert_idx = 1 if len(lines) > 1 else len(lines)
+                            lines.insert(insert_idx, f"**Priority:** {prio}")
+                            content = "\n".join(lines)
 
             with open(info_file, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -1137,11 +1415,34 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             info_file = canonical_dir / "info.md"
 
             self._update_status_in_info_md(info_file, status)
+            if status == "completed":
+                curr_step = getattr(GraphRequestHandler, "_global_recommendation_step", 0)
+                GraphRequestHandler._global_recommendation_step = (curr_step + 1) % 6
             print(f"[Status Saved in info.md]: {info_file} -> {status}")
 
             self._send_json(200, {
                 "success": True,
                 "message": f"Status updated to '{status}'",
+                "node": self._scan_single_node(node_dir)
+            })
+        except Exception as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_save_priority(self, payload: dict):
+        raw_path = payload.get("path", "")
+        priority = payload.get("priority", "normal")
+
+        try:
+            node_dir = self._resolve_graph_folder(raw_path)
+            canonical_dir, _, _ = self._resolve_shortcut(node_dir)
+            info_file = canonical_dir / "info.md"
+
+            self._update_priority_in_info_md(info_file, priority)
+            print(f"[Priority Saved in info.md]: {info_file} -> {priority}")
+
+            self._send_json(200, {
+                "success": True,
+                "message": f"Priority updated to '{priority}'",
                 "node": self._scan_single_node(node_dir)
             })
         except Exception as e:

@@ -26,3 +26,7 @@ desktop.ini
 # Graphify Output
 graphify-out/
 .graphify*
+
+# Recommendation Queue State
+.recommendation_queue.json
+*.recommendation_queue.json
