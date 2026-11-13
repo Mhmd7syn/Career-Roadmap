@@ -33,41 +33,87 @@ class TestPriorityRecommendation(unittest.TestCase):
         cls.orig_graph_dir = server.GRAPH_DIR
         server.GRAPH_DIR = cls.test_graph_dir
 
-        cls.port = find_available_port(9260)
-        cls.httpd = HTTPServer(("127.0.0.1", cls.port), GraphRequestHandler)
-        cls.server_thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
-        cls.server_thread.start()
-        cls.base_url = f"http://127.0.0.1:{cls.port}"
+        cls.httpd = None
+        cls.use_http = False
+        try:
+            cls.port = find_available_port(9260)
+            cls.httpd = HTTPServer(("127.0.0.1", cls.port), GraphRequestHandler)
+            cls.server_thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+            cls.server_thread.start()
+            cls.base_url = f"http://127.0.0.1:{cls.port}"
+            cls.use_http = True
+        except (PermissionError, OSError):
+            cls.httpd = None
+            cls.use_http = False
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.httpd.shutdown()
-            cls.httpd.server_close()
-        except Exception:
-            pass
+        if cls.httpd:
+            try:
+                cls.httpd.shutdown()
+                cls.httpd.server_close()
+            except Exception:
+                pass
         server.GRAPH_DIR = cls.orig_graph_dir
         shutil.rmtree(cls.test_dir, ignore_errors=True)
 
-    def _post(self, path: str, payload: dict) -> tuple[int, dict]:
-        url = f"{self.base_url}{path}"
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    def _invoke_handler(self, method: str, path: str, payload: dict | None = None) -> tuple[int, dict]:
+        import io
+        handler = GraphRequestHandler.__new__(GraphRequestHandler)
+        handler.command = method
+        handler.path = path
+        handler.headers = {"Content-Type": "application/json"}
+        body_bytes = json.dumps(payload).encode("utf-8") if payload else b""
+        handler.rfile = io.BytesIO(body_bytes)
+        handler.wfile = io.BytesIO()
+        handler.headers["Content-Length"] = str(len(body_bytes))
+
+        status_code = [200]
+        def mock_send_response(code, message=None):
+            status_code[0] = code
+        handler.send_response = mock_send_response
+        handler.send_header = lambda k, v: None
+        handler.end_headers = lambda: None
+
+        if method == "GET":
+            handler.do_GET()
+        elif method == "POST":
+            handler.do_POST()
+
+        raw_output = handler.wfile.getvalue().decode("utf-8")
         try:
-            with urllib.request.urlopen(req) as resp:
-                return resp.getcode(), json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read().decode("utf-8"))
+            body = json.loads(raw_output) if raw_output.strip() else {}
+        except Exception:
+            body = {"raw": raw_output}
+        return status_code[0], body
+
+    def _post(self, path: str, payload: dict) -> tuple[int, dict]:
+        if getattr(self, "use_http", False):
+            url = f"{self.base_url}{path}"
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+            try:
+                with urllib.request.urlopen(req) as resp:
+                    return resp.getcode(), json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read().decode("utf-8"))
+            except urllib.error.URLError:
+                self.use_http = False
+        return self._invoke_handler("POST", path, payload)
 
     def _get(self, path: str) -> tuple[int, dict]:
-        url = f"{self.base_url}{path}"
-        try:
-            with urllib.request.urlopen(url) as resp:
-                raw = resp.read().decode("utf-8")
-                return resp.getcode(), (json.loads(raw) if raw.strip() else {})
-        except urllib.error.HTTPError as e:
-            raw = e.read().decode("utf-8")
-            return e.code, (json.loads(raw) if raw.strip() else {})
+        if getattr(self, "use_http", False):
+            url = f"{self.base_url}{path}"
+            try:
+                with urllib.request.urlopen(url) as resp:
+                    raw = resp.read().decode("utf-8")
+                    return resp.getcode(), (json.loads(raw) if raw.strip() else {})
+            except urllib.error.HTTPError as e:
+                raw = e.read().decode("utf-8")
+                return e.code, (json.loads(raw) if raw.strip() else {})
+            except urllib.error.URLError:
+                self.use_http = False
+        return self._invoke_handler("GET", path)
 
     def test_parse_info_md_priority_extraction(self):
         handler = GraphRequestHandler.__new__(GraphRequestHandler)
@@ -292,6 +338,158 @@ class TestPriorityRecommendation(unittest.TestCase):
         # Refilled batch should now draw the next uncompleted nodes (phigh_4..6, pnorm_3..4)
         self.assertIn("phigh_4", refilled_ids)
         self.assertIn("pnorm_3", refilled_ids)
+
+    def test_queue_refreshed_after_priority_edit(self):
+        """
+        Verify:
+        When a node's priority is edited via /api/save-priority,
+        the recommendation queue immediately refreshes and updates the candidate order.
+        """
+        sandbox = self.test_graph_dir / "refresh_prio_test"
+        sandbox.mkdir(parents=True, exist_ok=True)
+        (sandbox / "info.md").write_text("# Refresh Prio Test\n\n**Status:** completed\n", encoding="utf-8")
+
+        n1 = sandbox / "node_alpha"
+        n1.mkdir(parents=True, exist_ok=True)
+        (n1 / "info.md").write_text("# Node Alpha\n\n**Status:** todo\n**Priority:** normal\n", encoding="utf-8")
+
+        n2 = sandbox / "node_beta"
+        n2.mkdir(parents=True, exist_ok=True)
+        (n2 / "info.md").write_text("# Node Beta\n\n**Status:** todo\n**Priority:** normal\n", encoding="utf-8")
+
+        p_path = urllib.parse.quote("refresh_prio_test")
+        _, init_data = self._get(f"/api/next-node?path={p_path}")
+        self.assertEqual(init_data["node"]["id"], "node_alpha")
+
+        # Promote node_beta to high priority
+        status, save_res = self._post("/api/save-priority", {
+            "path": "refresh_prio_test/node_beta",
+            "priority": "high"
+        })
+        self.assertEqual(status, 200)
+
+        # Verify .recommendation_queue.json refreshed on disk
+        queue_file = self.test_graph_dir / ".recommendation_queue.json"
+        self.assertTrue(queue_file.exists())
+        with open(queue_file, "r", encoding="utf-8") as f:
+            q_data = json.load(f)
+        scope_q = q_data["scopes"].get("refresh_prio_test")
+        self.assertIsNotNone(scope_q)
+        high_ids = [n["id"] for n in scope_q["queues"]["high"]]
+        self.assertIn("node_beta", high_ids)
+
+        # Next recommendation must immediately recommend node_beta as high 1
+        _, next_data = self._get(f"/api/next-node?path={p_path}")
+        self.assertEqual(next_data["node"]["id"], "node_beta")
+        self.assertEqual(next_data["node"]["priority"], "high")
+        self.assertEqual(next_data["cycleSlot"], "high 1")
+
+    def test_queue_refreshed_after_adding_new_node(self):
+        """
+        Verify:
+        Adding a new child station via /api/add-child immediately refreshes the saved queue.
+        """
+        sandbox = self.test_graph_dir / "refresh_add_test"
+        sandbox.mkdir(parents=True, exist_ok=True)
+        (sandbox / "info.md").write_text("# Refresh Add Test\n\n**Status:** completed\n", encoding="utf-8")
+
+        p_path = urllib.parse.quote("refresh_add_test")
+        _, init_data = self._get(f"/api/next-node?path={p_path}")
+        self.assertTrue(init_data.get("allCompleted"))
+
+        # Add child node
+        status, add_res = self._post("/api/add-child", {
+            "parentPath": "refresh_add_test",
+            "name": "New Station"
+        })
+        self.assertEqual(status, 200)
+
+        # Verify .recommendation_queue.json refreshed on disk
+        queue_file = self.test_graph_dir / ".recommendation_queue.json"
+        with open(queue_file, "r", encoding="utf-8") as f:
+            q_data = json.load(f)
+        scope_q = q_data["scopes"].get("refresh_add_test")
+        self.assertIsNotNone(scope_q)
+        normal_ids = [n["id"] for n in scope_q["queues"]["normal"]]
+        self.assertIn("new-station", normal_ids)
+
+        # Recommendation immediately finds new station
+        _, next_data = self._get(f"/api/next-node?path={p_path}")
+        self.assertTrue(next_data.get("found"))
+        self.assertEqual(next_data["node"]["id"], "new-station")
+
+    def test_cadence_last_completed_and_next_slot_tracking(self):
+        """
+        Verify the progression of last_completed and next_slot:
+        high 1 -> normal 1 -> low 1 -> high 2 -> normal 2 -> high 3 -> high 1.
+        """
+        sandbox = self.test_graph_dir / "cadence_test"
+        sandbox.mkdir(parents=True, exist_ok=True)
+        (sandbox / "info.md").write_text("# Cadence Test\n\n**Status:** completed\n", encoding="utf-8")
+
+        # 3 High, 2 Normal, 1 Low
+        for i in (1, 2, 3):
+            d = sandbox / f"h_{i}"
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "info.md").write_text(f"# H {i}\n\n**Status:** todo\n**Priority:** high\n", encoding="utf-8")
+
+        for i in (1, 2):
+            d = sandbox / f"n_{i}"
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "info.md").write_text(f"# N {i}\n\n**Status:** todo\n**Priority:** normal\n", encoding="utf-8")
+
+        d_low = sandbox / "l_1"
+        d_low.mkdir(parents=True, exist_ok=True)
+        (d_low / "info.md").write_text("# L 1\n\n**Status:** todo\n**Priority:** low\n", encoding="utf-8")
+
+        p_path = urllib.parse.quote("cadence_test")
+
+        # 1. Initially at step 0 (target: high 1)
+        _, d0 = self._get(f"/api/next-node?path={p_path}")
+        self.assertEqual(d0["cycleSlot"], "high 1")
+        self.assertEqual(d0["node"]["id"], "h_1")
+
+        # 2. Complete h_1 -> last_completed is 'high 1', next is 'normal 1'
+        self._post("/api/save-status", {"path": "cadence_test/h_1", "status": "completed"})
+        _, d1 = self._get(f"/api/next-node?path={p_path}")
+        self.assertEqual(d1["lastCompletedSlot"], "high 1")
+        self.assertEqual(d1["cycleSlot"], "normal 1")
+        self.assertEqual(d1["node"]["id"], "n_1")
+
+        # 3. Complete n_1 -> last_completed is 'normal 1', next is 'low 1'
+        self._post("/api/save-status", {"path": "cadence_test/n_1", "status": "completed"})
+        _, d2 = self._get(f"/api/next-node?path={p_path}")
+        self.assertEqual(d2["lastCompletedSlot"], "normal 1")
+        self.assertEqual(d2["cycleSlot"], "low 1")
+        self.assertEqual(d2["node"]["id"], "l_1")
+
+        # 4. Complete l_1 -> last_completed is 'low 1', next is 'high 2'
+        self._post("/api/save-status", {"path": "cadence_test/l_1", "status": "completed"})
+        _, d3 = self._get(f"/api/next-node?path={p_path}")
+        self.assertEqual(d3["lastCompletedSlot"], "low 1")
+        self.assertEqual(d3["cycleSlot"], "high 2")
+        self.assertEqual(d3["node"]["id"], "h_2")
+
+        # 5. Complete h_2 -> last_completed is 'high 2', next is 'normal 2'
+        self._post("/api/save-status", {"path": "cadence_test/h_2", "status": "completed"})
+        _, d4 = self._get(f"/api/next-node?path={p_path}")
+        self.assertEqual(d4["lastCompletedSlot"], "high 2")
+        self.assertEqual(d4["cycleSlot"], "normal 2")
+        self.assertEqual(d4["node"]["id"], "n_2")
+
+        # 6. Complete n_2 -> last_completed is 'normal 2', next is 'high 3'
+        self._post("/api/save-status", {"path": "cadence_test/n_2", "status": "completed"})
+        _, d5 = self._get(f"/api/next-node?path={p_path}")
+        self.assertEqual(d5["lastCompletedSlot"], "normal 2")
+        self.assertEqual(d5["cycleSlot"], "high 3")
+        self.assertEqual(d5["node"]["id"], "h_3")
+
+        # 7. Complete h_3 -> all completed
+        self._post("/api/save-status", {"path": "cadence_test/h_3", "status": "completed"})
+        _, d6 = self._get(f"/api/next-node?path={p_path}")
+        self.assertTrue(d6.get("allCompleted"))
+        self.assertEqual(d6["lastCompletedSlot"], "high 3")
+        self.assertEqual(d6["nextSlot"], "high 1")
 
     def test_ui_markup_and_css_priority_support(self):
         html = (BASE_DIR / "web" / "index.html").read_text(encoding="utf-8")

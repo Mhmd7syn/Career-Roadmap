@@ -12,7 +12,7 @@
   'use strict';
 
   // State
-  const nodeCache = {}; // relPath -> node data
+  let nodeCache = {}; // relPath -> node data
   let historyStack = [{ id: 'root', relPath: '', title: '' }];
   let currentNode = null;
   let currentRecommendedNode = null;
@@ -24,6 +24,118 @@
   let isSavingMarkdown = false;
   let targetAddChildParentId = '';
   let recommendationCycleStep = parseInt(localStorage.getItem('kg_recommendation_cycle_step') || '0', 10);
+
+  function clearNodeCache() {
+    for (const k in nodeCache) {
+      delete nodeCache[k];
+    }
+  }
+
+  async function refreshCurrentView() {
+    clearNodeCache();
+    fullGraphTreeData = null;
+    const currentRel = getCurrentRelPath();
+    await loadNodeOnDemand(currentRel, true);
+    updateProgressStats();
+    updateNextNodeRecommendation(currentRel);
+  }
+
+  let lastObservedVersion = null;
+  let isCheckingVersion = false;
+
+  async function checkForDiskChanges() {
+    if (isCheckingVersion || isSavingMarkdown) return;
+    const currentRel = getCurrentRelPath();
+    const modalRel = activeModalNodeRelPath;
+
+    isCheckingVersion = true;
+    try {
+      const res = await fetch(`/api/version?path=${encodeURIComponent(currentRel)}&modalPath=${encodeURIComponent(modalRel)}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const newVersion = data.version;
+
+        if (lastObservedVersion === null) {
+          lastObservedVersion = newVersion;
+          return;
+        }
+
+        if (newVersion !== lastObservedVersion) {
+          lastObservedVersion = newVersion;
+          await autoRefreshFromDisk();
+        }
+      }
+    } catch (err) {
+      // Ignore network errors silently during live polling
+    } finally {
+      isCheckingVersion = false;
+    }
+  }
+
+  async function autoRefreshFromDisk() {
+    clearNodeCache();
+    fullGraphTreeData = null;
+
+    const currentRel = getCurrentRelPath();
+
+    // 1. Priority: Surgical refresh of active station and cards
+    try {
+      const res = await fetch(`/api/node?path=${encodeURIComponent(currentRel)}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        nodeCache[currentRel] = data;
+
+        const patched = patchCurrentView(data);
+        if (!patched) {
+          currentNode = data;
+          renderCurrentView();
+        }
+
+        updateProgressStats();
+        updateNextNodeRecommendation(currentRel);
+      }
+    } catch (e) {
+      await loadNodeOnDemand(currentRel, true);
+    }
+
+    // 2. If markdown modal is open, refresh document content automatically
+    const overlay = document.getElementById('markdown-modal-overlay');
+    if (overlay && overlay.classList.contains('open') && activeModalNodeRelPath) {
+      const textarea = document.getElementById('md-textarea');
+      const previewEl = document.getElementById('md-rendered-view');
+      const priorityEl = document.getElementById('md-modal-priority');
+      const docType = activeDocType;
+
+      // Do not overwrite user's live typing if actively drafting in edit mode
+      const isActivelyDrafting = (activeEditorMode === 'edit' && textarea && textarea.value !== lastSavedContent);
+
+      if (!isActivelyDrafting) {
+        try {
+          const res = await fetch(`/api/node?path=${encodeURIComponent(activeModalNodeRelPath)}`, { cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            nodeCache[activeModalNodeRelPath] = data;
+            const content = docType === 'info' ? (data.info || '') : (data.notes || '');
+            if (textarea) {
+              textarea.value = content;
+              lastSavedContent = content;
+            }
+            if (previewEl) {
+              renderMarkdownContent(content, previewEl);
+            }
+            if (priorityEl && data.priority) {
+              const formatPrio = (p) => p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
+              priorityEl.className = `btn-priority-cycle priority-${data.priority}`;
+              priorityEl.textContent = formatPrio(data.priority);
+              priorityEl.title = `Priority: ${data.priority}. Click to cycle: Normal → High → Low`;
+            }
+          }
+        } catch (e) {
+          // Ignore fetch error silently
+        }
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // 1. Navigation & State Accessors
@@ -72,7 +184,7 @@
         }
       }
     }
-    loadNodeOnDemand(relPath, false, 'forward');
+    loadNodeOnDemand(relPath, true, 'forward');
   }
 
   // ---------------------------------------------------------------------------
@@ -104,7 +216,7 @@
     }
   }
 
-  async function loadNodeOnDemand(relPath, forceRefresh = false, direction = 'none') {
+  async function loadNodeOnDemand(relPath, forceRefresh = false, direction = 'none', preferPatch = false) {
     if (!forceRefresh && nodeCache[relPath]) {
       currentNode = nodeCache[relPath];
       syncHistoryTitle(relPath, currentNode.title);
@@ -119,6 +231,16 @@
       if (res.ok) {
         const data = await res.json();
         nodeCache[relPath] = data;
+
+        if (preferPatch && currentNode && currentNode.relPath === relPath) {
+          const patched = patchCurrentView(data);
+          if (patched) {
+            syncHistoryTitle(relPath, data.title);
+            updateNextNodeRecommendation(relPath);
+            return;
+          }
+        }
+
         currentNode = data;
         syncHistoryTitle(relPath, data.title);
         if (data.title) document.title = `${data.title} — Knowledge Graph`;
@@ -132,15 +254,13 @@
 
   async function setNodeStatus(newStatus) {
     if (!currentNode) return;
-
-    if (newStatus === 'completed') {
-      recommendationCycleStep = (recommendationCycleStep + 1) % 6;
-      localStorage.setItem('kg_recommendation_cycle_step', recommendationCycleStep);
-    }
-
-    currentNode.status = newStatus;
     const relPath = currentNode.relPath;
 
+    // 1. Priority: Immediate visual update of target element (0ms latency)
+    currentNode.status = newStatus;
+    patchParentCardDOM({ status: newStatus });
+
+    // 2. Secondary: Sync to disk and refresh dependent statistics in background
     try {
       const res = await fetch('/api/save-status', {
         method: 'POST',
@@ -148,10 +268,12 @@
         body: JSON.stringify({ path: relPath, status: newStatus })
       });
       if (res.ok) {
+        clearNodeCache();
         const data = await res.json();
         if (data.node) {
           nodeCache[relPath] = data.node;
           currentNode = data.node;
+          patchParentCardDOM(data.node);
         }
         updateProgressStats();
         updateNextNodeRecommendation(relPath);
@@ -160,16 +282,25 @@
     } catch (err) {
       console.warn('Failed to save status to disk:', err);
     }
-
-    renderCurrentView();
   }
 
   async function setNodePriority(newPriority) {
     if (!currentNode) return;
-
-    currentNode.priority = newPriority;
     const relPath = currentNode.relPath;
 
+    // 1. Priority: Immediate visual update of target element (0ms latency)
+    currentNode.priority = newPriority;
+    patchParentCardDOM({ priority: newPriority });
+
+    const priorityEl = document.getElementById('md-modal-priority');
+    if (priorityEl && activeModalNodeRelPath === relPath) {
+      const formatPrio = (p) => p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
+      priorityEl.className = `btn-priority-cycle priority-${newPriority}`;
+      priorityEl.textContent = formatPrio(newPriority);
+      priorityEl.title = `Priority: ${newPriority}. Click to cycle: Normal → High → Low`;
+    }
+
+    // 2. Secondary: Sync to disk and refresh recommendation in background
     try {
       const res = await fetch('/api/save-priority', {
         method: 'POST',
@@ -177,10 +308,12 @@
         body: JSON.stringify({ path: relPath, priority: newPriority })
       });
       if (res.ok) {
+        clearNodeCache();
         const data = await res.json();
         if (data.node) {
           nodeCache[relPath] = data.node;
           currentNode = data.node;
+          patchParentCardDOM(data.node);
         }
         updateNextNodeRecommendation(relPath);
         fullGraphTreeData = null;
@@ -188,11 +321,21 @@
     } catch (err) {
       console.warn('Failed to save priority to disk:', err);
     }
-
-    renderCurrentView();
   }
 
   async function setChildPriority(childRelPath, newPriority) {
+    // 1. Priority: Immediate visual update of target child card (0ms latency)
+    patchChildCardDOM(childRelPath, { priority: newPriority });
+
+    const priorityEl = document.getElementById('md-modal-priority');
+    if (priorityEl && activeModalNodeRelPath === childRelPath) {
+      const formatPrio = (p) => p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
+      priorityEl.className = `btn-priority-cycle priority-${newPriority}`;
+      priorityEl.textContent = formatPrio(newPriority);
+      priorityEl.title = `Priority: ${newPriority}. Click to cycle: Normal → High → Low`;
+    }
+
+    // 2. Secondary: Sync to disk and refresh recommendation in background
     try {
       const res = await fetch('/api/save-priority', {
         method: 'POST',
@@ -200,13 +343,11 @@
         body: JSON.stringify({ path: childRelPath, priority: newPriority })
       });
       if (res.ok) {
+        clearNodeCache();
         const data = await res.json();
         if (data.node) {
           nodeCache[childRelPath] = data.node;
-        }
-        if (currentNode && currentNode.children) {
-          const ch = currentNode.children.find(c => c.relPath === childRelPath);
-          if (ch) ch.priority = newPriority;
+          patchChildCardDOM(childRelPath, data.node);
         }
         updateNextNodeRecommendation(getCurrentRelPath());
         fullGraphTreeData = null;
@@ -214,11 +355,9 @@
     } catch (err) {
       console.warn('Failed to save child priority to disk:', err);
     }
-
-    renderCurrentView();
   }
 
-  async function updateNextNodeRecommendation(relPath = '') {
+  async function updateNextNodeRecommendation(relPath = '', explicitStep = null) {
     const nextPill = document.getElementById('next-node-pill');
     const nextLabel = document.getElementById('next-node-label');
     const nextTitle = document.getElementById('next-node-title');
@@ -227,7 +366,8 @@
     if (!nextPill) return;
 
     try {
-      const res = await fetch(`/api/next-node?path=${encodeURIComponent(relPath)}&step=${recommendationCycleStep}`, { cache: 'no-store' });
+      const stepParam = explicitStep !== null ? `&step=${explicitStep}` : '';
+      const res = await fetch(`/api/next-node?path=${encodeURIComponent(relPath)}${stepParam}`, { cache: 'no-store' });
       if (!res.ok) return;
 
       const data = await res.json();
@@ -237,34 +377,42 @@
         const node = data.node;
         const isCurrent = data.isCurrentNode;
         const priority = node.priority || 'normal';
+        if (typeof data.cycleStep === 'number') {
+          recommendationCycleStep = data.cycleStep;
+          localStorage.setItem('kg_recommendation_cycle_step', recommendationCycleStep);
+        }
         const stepNum = (typeof data.cycleStep === 'number' ? data.cycleStep : recommendationCycleStep) + 1;
 
         nextPill.style.display = 'inline-flex';
         nextPill.classList.remove('is-completed', 'is-needs-review');
 
+        const slotBadgeText = data.cycleSlot ? data.cycleSlot.toUpperCase() : (priority === 'normal' ? 'normal' : priority.toUpperCase());
         if (nextPriority) {
           nextPriority.style.display = 'inline-block';
           nextPriority.className = `next-node-priority-badge priority-${priority}`;
-          nextPriority.textContent = priority === 'normal' ? 'normal' : priority.toUpperCase();
+          nextPriority.textContent = slotBadgeText;
         }
 
-        const cadenceInfo = ` [Step ${stepNum}/6 • 3H+2N+1L Cadence]`;
+        const slotInfo = data.cycleSlot ? ` [${data.cycleSlot.toUpperCase()}]` : ` [Step ${stepNum}/6]`;
+        const lastCompletedText = data.lastCompletedSlot ? ` • Last: ${data.lastCompletedSlot}` : '';
+        const nextExpectedText = data.nextSlot ? ` → Next: ${data.nextSlot}` : '';
+        const cadenceInfo = `${slotInfo}${lastCompletedText}${nextExpectedText} [3H+2N+1L Cadence]`;
         const poolSummary = data.poolCounts
-          ? ` [Pool: ${data.poolCounts.high} High, ${data.poolCounts.normal} Normal, ${data.poolCounts.low} Low]`
+          ? ` [Active: ${data.poolCounts.high}H/${data.poolCounts.normal}N/${data.poolCounts.low}L | Total: ${data.totalCandidates || 0}]`
           : '';
 
         if (node.status === 'needs-review') {
           nextPill.classList.add('is-needs-review');
           nextLabel.textContent = 'Review:';
-          nextPill.title = `Needs Review [${priority.toUpperCase()}]: ${node.title} (${node.category})${cadenceInfo}${poolSummary} — click to review`;
+          nextPill.title = `Needs Review [${slotBadgeText}]: ${node.title} (${node.category}) • ${cadenceInfo}${poolSummary} — click to review`;
         } else if (isCurrent) {
           nextPill.classList.add('is-current');
           nextLabel.textContent = 'Current:';
-          nextPill.title = `Current Focus [${priority.toUpperCase()}]: ${node.title} (${node.category})${cadenceInfo}${poolSummary} — click to view info.md`;
+          nextPill.title = `Current Focus [${slotBadgeText}]: ${node.title} (${node.category}) • ${cadenceInfo}${poolSummary} — click to view info.md`;
         } else {
           nextPill.classList.remove('is-current');
           nextLabel.textContent = 'Next:';
-          nextPill.title = `Next to Learn [${priority.toUpperCase()}]: ${node.title} in ${node.category}${cadenceInfo}${poolSummary} — click to jump`;
+          nextPill.title = `Next to Learn [${slotBadgeText}]: ${node.title} in ${node.category} • ${cadenceInfo}${poolSummary} — click to jump`;
         }
         nextTitle.textContent = node.title;
       } else if (data.allCompleted) {
@@ -315,7 +463,7 @@
           span.textContent = item.title;
           span.onclick = () => {
             historyStack = historyStack.slice(0, index + 1);
-            loadNodeOnDemand(item.relPath, false, 'back');
+            loadNodeOnDemand(item.relPath, true, 'back');
           };
         }
         breadcrumbsEl.appendChild(span);
@@ -328,7 +476,7 @@
         if (historyStack.length > 1) {
           historyStack.pop();
           const prev = getCurrentHistoryItem();
-          loadNodeOnDemand(prev.relPath, false, 'back');
+          loadNodeOnDemand(prev.relPath, true, 'back');
         }
       };
     }
@@ -368,8 +516,9 @@
       const pathData = `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${x1.toFixed(1)} ${cp1_y.toFixed(1)}, ${x2.toFixed(1)} ${cp2_y.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
       const status = childEl.dataset.status || 'todo';
       const pathId = `spline-${index}`;
+      const childRel = childEl.dataset.relPath || '';
 
-      svgHtml += `<path id="${pathId}" class="graph-svg-path ${status}" d="${pathData}" />`;
+      svgHtml += `<path id="${pathId}" data-child-rel-path="${childRel}" class="graph-svg-path ${status}" d="${pathData}" />`;
 
       childEl.onmouseenter = () => {
         const p = document.getElementById(pathId);
@@ -389,7 +538,179 @@
   });
 
   // ---------------------------------------------------------------------------
-  // 5. Main Canvas View
+  // 5. Surgical In-Place DOM Patching
+  // ---------------------------------------------------------------------------
+
+  function patchParentCardDOM(data) {
+    if (!data) return false;
+    const parentCard = document.querySelector('.graph-parent-card');
+    if (!parentCard) return false;
+
+    if (data.relPath !== undefined) {
+      parentCard.dataset.relPath = data.relPath || '';
+    }
+
+    if (data.title && typeof data.title === 'string') {
+      const titleEl = parentCard.querySelector('.graph-parent-title');
+      if (titleEl && titleEl.textContent !== data.title) {
+        titleEl.textContent = data.title;
+      }
+      const activeCrumb = document.querySelector('.breadcrumb-item.active');
+      if (activeCrumb && activeCrumb.textContent !== data.title) {
+        activeCrumb.textContent = data.title;
+      }
+      document.title = `${data.title} — Knowledge Graph`;
+    }
+
+    if (data.status) {
+      const btnStatus = document.getElementById('btn-status-toggle');
+      if (btnStatus) {
+        const s = data.status;
+        const label = s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Needs Review' : '○ To Do'));
+        btnStatus.className = `btn-status-cycle status-${s}`;
+        btnStatus.textContent = label;
+        btnStatus.title = s === 'needs-review' ? 'Needs review after 1 month. Click to mark reviewed and completed' : 'Cycle status: To Do → In Progress → Done';
+      }
+    }
+
+    if (data.priority) {
+      const btnPriority = document.getElementById('btn-priority-toggle');
+      if (btnPriority) {
+        const p = data.priority;
+        const label = p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
+        btnPriority.className = `btn-priority-cycle priority-${p}`;
+        btnPriority.textContent = label;
+        btnPriority.title = 'Cycle priority: Normal → High → Low → Normal';
+      }
+    }
+
+    if (data.extraFiles !== undefined) {
+      const count = Array.isArray(data.extraFiles) ? data.extraFiles.length : 0;
+      let btnFiles = document.getElementById('btn-parent-extra-files');
+      if (count > 0) {
+        if (btnFiles) {
+          btnFiles.textContent = `📁 Extra Files (${count})`;
+          btnFiles.title = `View ${count} extra files`;
+        } else {
+          const actionsContainer = parentCard.querySelector('.graph-parent-actions');
+          if (actionsContainer) {
+            btnFiles = document.createElement('button');
+            btnFiles.className = 'btn-graph-action btn-graph-files';
+            btnFiles.id = 'btn-parent-extra-files';
+            btnFiles.textContent = `📁 Extra Files (${count})`;
+            btnFiles.title = `View ${count} extra files`;
+            btnFiles.onclick = () => openExtraFilesModal(currentNode || data);
+            actionsContainer.insertBefore(btnFiles, actionsContainer.firstChild);
+          }
+        }
+      } else if (btnFiles) {
+        btnFiles.remove();
+      }
+    }
+
+    return true;
+  }
+
+  function patchChildCardDOM(childRelPath, partialData) {
+    if (!childRelPath || !partialData) return false;
+    let childEl = document.querySelector(`.graph-child-node[data-rel-path="${childRelPath}"]`);
+    if (!childEl && currentNode && currentNode.children) {
+      const chObj = currentNode.children.find(c => c.relPath === childRelPath);
+      if (chObj && chObj.id) {
+        childEl = document.querySelector(`.graph-child-node[data-id="${chObj.id}"]`);
+      }
+    }
+    if (!childEl) return false;
+
+    if (partialData.title) {
+      const titleEl = childEl.querySelector('.child-node-title');
+      if (titleEl && titleEl.textContent !== partialData.title) {
+        titleEl.textContent = partialData.title;
+        titleEl.title = partialData.title;
+      }
+    }
+
+    if (partialData.status) {
+      const s = partialData.status;
+      childEl.dataset.status = s;
+      const dot = childEl.querySelector('.child-status-dot');
+      if (dot) {
+        dot.className = `child-status-dot ${s}`;
+      }
+      const spline = document.querySelector(`.graph-svg-path[data-child-rel-path="${childRelPath}"]`);
+      if (spline) {
+        spline.setAttribute('class', `graph-svg-path ${s}`);
+      }
+    }
+
+    if (partialData.priority) {
+      const p = partialData.priority;
+      const pBtn = childEl.querySelector('.child-priority-badge');
+      if (pBtn) {
+        const label = p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'normal');
+        pBtn.className = `child-priority-badge priority-${p}`;
+        pBtn.textContent = label;
+        pBtn.title = `Priority: ${p}. Click to change`;
+      }
+    }
+
+    if (currentNode && currentNode.children) {
+      const childInMem = currentNode.children.find(c => c.relPath === childRelPath);
+      if (childInMem) {
+        Object.assign(childInMem, partialData);
+      }
+    }
+
+    return true;
+  }
+
+  function patchChildrenListDOM(newChildren) {
+    if (!currentNode || !currentNode.children || !Array.isArray(newChildren)) return false;
+    const oldChildren = currentNode.children;
+    if (oldChildren.length !== newChildren.length) {
+      return false;
+    }
+
+    for (let i = 0; i < newChildren.length; i++) {
+      if (oldChildren[i].relPath !== newChildren[i].relPath || oldChildren[i].id !== newChildren[i].id) {
+        return false;
+      }
+    }
+
+    for (const ch of newChildren) {
+      patchChildCardDOM(ch.relPath, ch);
+    }
+    currentNode.children = newChildren;
+    return true;
+  }
+
+  function patchCurrentView(newNodeData) {
+    if (!currentNode || !newNodeData) return false;
+    if (currentNode.relPath !== newNodeData.relPath) return false;
+
+    patchParentCardDOM(newNodeData);
+    currentNode.title = newNodeData.title;
+    currentNode.status = newNodeData.status;
+    currentNode.priority = newNodeData.priority;
+    currentNode.info = newNodeData.info;
+    currentNode.notes = newNodeData.notes;
+    currentNode.extraFiles = newNodeData.extraFiles;
+    currentNode.badge = newNodeData.badge;
+
+    if (newNodeData.children) {
+      const patchedChildren = patchChildrenListDOM(newNodeData.children);
+      if (!patchedChildren) {
+        currentNode = newNodeData;
+        renderCurrentView();
+        return true;
+      }
+    }
+
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 6. Main Canvas View
   // ---------------------------------------------------------------------------
 
   function renderCurrentView(direction = 'none') {
@@ -439,7 +760,7 @@
 
     // 1. Render Parent Node Card
     parentAnchor.innerHTML = `
-      <div class="graph-parent-card">
+      <div class="graph-parent-card" data-rel-path="${currentNode.relPath || ''}">
         <div class="graph-parent-top-row">
           <button class="btn-status-cycle status-${currentStatus}" id="btn-status-toggle" title="${currentStatus === 'needs-review' ? 'Needs review after 1 month. Click to mark reviewed and completed' : 'Cycle status: To Do → In Progress → Done'}">
             ${currentStatus === 'completed' ? '● Done' : (currentStatus === 'in-progress' ? '◐ In Progress' : (currentStatus === 'needs-review' ? '⚠ Needs Review' : '○ To Do'))}
@@ -532,6 +853,7 @@
       nodeEl.className = `graph-child-node ${isChildShortcut ? 'is-shortcut' : ''} ${direction === 'forward' ? 'spawning' : ''}`;
       nodeEl.dataset.status = childStatus;
       nodeEl.dataset.id = child.id;
+      nodeEl.dataset.relPath = child.relPath || '';
 
       const dotClass = childStatus === 'completed'
         ? 'completed'
@@ -571,7 +893,7 @@
       // Clicking child drills down into it
       nodeEl.onclick = () => {
         historyStack.push({ id: child.id, relPath: child.relPath, title: child.title });
-        loadNodeOnDemand(child.relPath, false, 'forward');
+        loadNodeOnDemand(child.relPath, true, 'forward');
       };
 
       childrenAnchor.appendChild(nodeEl);
@@ -652,10 +974,37 @@
           const curPrio = (nodeCache[relPath] && nodeCache[relPath].priority) || initialPrio;
           const nextMap = { 'normal': 'high', 'high': 'low', 'low': 'normal' };
           const nextPrio = nextMap[curPrio] || 'normal';
-          await setChildPriority(relPath, nextPrio);
+          if (currentNode && currentNode.relPath === relPath) {
+            await setNodePriority(nextPrio);
+          } else {
+            await setChildPriority(relPath, nextPrio);
+          }
           priorityEl.className = `btn-priority-cycle priority-${nextPrio}`;
           priorityEl.textContent = formatPrio(nextPrio);
           priorityEl.title = `Priority: ${nextPrio}. Click to cycle: Normal → High → Low`;
+
+          // Keep editor and preview in sync with updated priority
+          if (textarea && textarea.value) {
+            const prioPatt = /(\*\*Priority:\*\*\s*)([a-zA-Z0-9_\-]+)/i;
+            if (prioPatt.test(textarea.value)) {
+              textarea.value = textarea.value.replace(prioPatt, `$1${nextPrio}`);
+            } else {
+              const prioPatt2 = /(priority:\s*)([a-zA-Z0-9_\-]+)/i;
+              if (prioPatt2.test(textarea.value)) {
+                textarea.value = textarea.value.replace(prioPatt2, `$1${nextPrio}`);
+              } else {
+                const statMatch = textarea.value.match(/(\*\*Status:\*\*[^\n]*)/i);
+                if (statMatch) {
+                  const idx = statMatch.index + statMatch[0].length;
+                  textarea.value = textarea.value.slice(0, idx) + `\n**Priority:** ${nextPrio}` + textarea.value.slice(idx);
+                } else {
+                  textarea.value = `**Priority:** ${nextPrio}\n` + textarea.value;
+                }
+              }
+            }
+            lastSavedContent = textarea.value;
+            renderMarkdownContent(textarea.value, previewEl);
+          }
         };
       } else {
         priorityEl.style.display = 'none';
@@ -670,25 +1019,24 @@
     }
 
     let content = '';
-    const cachedNode = nodeCache[relPath];
-    if (cachedNode && cachedNode[docType]) {
-      content = cachedNode[docType];
-    } else {
-      try {
-        const res = await fetch(`/api/node?path=${encodeURIComponent(relPath)}`);
-        if (res.ok) {
-          const data = await res.json();
-          nodeCache[relPath] = data;
-          if (priorityEl && data.priority) {
-            const formatPrio = (p) => p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
-            priorityEl.className = `btn-priority-cycle priority-${data.priority}`;
-            priorityEl.textContent = formatPrio(data.priority);
-            priorityEl.title = `Priority: ${data.priority}. Click to cycle: Normal → High → Low`;
-          }
-          content = docType === 'info' ? (data.info || '') : (data.notes || '');
+    try {
+      const res = await fetch(`/api/node?path=${encodeURIComponent(relPath)}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        nodeCache[relPath] = data;
+        if (priorityEl && data.priority) {
+          const formatPrio = (p) => p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
+          priorityEl.className = `btn-priority-cycle priority-${data.priority}`;
+          priorityEl.textContent = formatPrio(data.priority);
+          priorityEl.title = `Priority: ${data.priority}. Click to cycle: Normal → High → Low`;
         }
-      } catch (e) {
-        console.warn(`Failed to load ${filename} from disk:`, e);
+        content = docType === 'info' ? (data.info || '') : (data.notes || '');
+      }
+    } catch (e) {
+      console.warn(`Failed to load ${filename} from disk:`, e);
+      const cachedNode = nodeCache[relPath];
+      if (cachedNode && cachedNode[docType]) {
+        content = cachedNode[docType];
       }
     }
 
@@ -708,10 +1056,14 @@
     overlay.classList.add('open');
   }
 
-  function closeMarkdownModal() {
+  async function closeMarkdownModal() {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
     const textarea = document.getElementById('md-textarea');
     if (textarea && textarea.value !== lastSavedContent) {
-      saveMarkdownToDisk();
+      await saveMarkdownToDisk();
     }
     document.getElementById('markdown-modal-overlay').classList.remove('open');
   }
@@ -779,6 +1131,30 @@
       if (!el.getAttribute('dir')) {
         el.setAttribute('dir', 'auto');
       }
+    });
+
+    // Make checkpoint task checkboxes interactive
+    targetEl.querySelectorAll('input[type="checkbox"]').forEach((cb, cbIndex) => {
+      cb.removeAttribute('disabled');
+      cb.style.cursor = 'pointer';
+      cb.onchange = async () => {
+        const textarea = document.getElementById('md-textarea');
+        if (!textarea) return;
+        let text = textarea.value;
+        let count = 0;
+        const taskRegex = /^(\s*[-*+]\s+\[)([ xX])(\]\s+.*)$/gm;
+        text = text.replace(taskRegex, (match, prefix, checkState, suffix) => {
+          if (count === cbIndex) {
+            count++;
+            return `${prefix}${cb.checked ? 'x' : ' '}${suffix}`;
+          }
+          count++;
+          return match;
+        });
+        textarea.value = text;
+        lastSavedContent = '';
+        await saveMarkdownToDisk();
+      };
     });
 
     if (window.renderMathInElement) {
@@ -865,6 +1241,29 @@
     isSavingMarkdown = true;
     setAutosaveStatus('saving');
 
+    // 1. Priority: Immediate local patch of the affected card (0ms latency)
+    if (docType === 'info') {
+      const titleMatch = content.match(/^#\s+(.+)$/m);
+      const parsedTitle = titleMatch ? titleMatch[1].trim() : null;
+
+      const statMatch = content.match(/\*\*Status:\*\*\s*([a-zA-Z0-9_\-]+)/i) || content.match(/status:\s*([a-zA-Z0-9_\-]+)/i);
+      const parsedStatus = statMatch ? statMatch[1].toLowerCase().trim() : null;
+
+      const prioMatch = content.match(/\*\*Priority:\*\*\s*([a-zA-Z0-9_\-]+)/i) || content.match(/priority:\s*([a-zA-Z0-9_\-]+)/i);
+      const parsedPriority = prioMatch ? prioMatch[1].toLowerCase().trim() : null;
+
+      const optimisticPatch = {};
+      if (parsedTitle) optimisticPatch.title = parsedTitle;
+      if (parsedStatus) optimisticPatch.status = parsedStatus;
+      if (parsedPriority) optimisticPatch.priority = parsedPriority;
+
+      if (currentNode && currentNode.relPath === relPath) {
+        patchParentCardDOM(optimisticPatch);
+      } else if (currentNode && currentNode.children && currentNode.children.some(c => c.relPath === relPath)) {
+        patchChildCardDOM(relPath, optimisticPatch);
+      }
+    }
+
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -876,17 +1275,30 @@
         const data = await res.json();
         lastSavedContent = content;
         setAutosaveStatus('saved');
+        clearNodeCache();
+        fullGraphTreeData = null;
 
         if (data.node) {
           nodeCache[relPath] = data.node;
           if (currentNode && currentNode.relPath === relPath) {
             currentNode = data.node;
+            patchParentCardDOM(data.node);
+          } else if (currentNode && currentNode.children && currentNode.children.some(c => c.relPath === relPath)) {
+            patchChildCardDOM(relPath, data.node);
+          }
+
+          const priorityEl = document.getElementById('md-modal-priority');
+          if (priorityEl && data.node.priority) {
+            const formatPrio = (p) => p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
+            priorityEl.className = `btn-priority-cycle priority-${data.node.priority}`;
+            priorityEl.textContent = formatPrio(data.node.priority);
+            priorityEl.title = `Priority: ${data.node.priority}. Click to cycle: Normal → High → Low`;
           }
         }
 
-        if (docType === 'info') {
-          loadNodeOnDemand(getCurrentRelPath(), true);
-        }
+        // Secondary: Refresh dependent progress metrics and recommendations in background
+        updateProgressStats();
+        updateNextNodeRecommendation(getCurrentRelPath());
       } else {
         setAutosaveStatus('error');
       }
@@ -1008,6 +1420,7 @@
           });
 
           if (res.ok) {
+            clearNodeCache();
             await loadNodeOnDemand(relPath, true);
             openExtraFilesModal(currentNode);
           }
@@ -1126,8 +1539,10 @@
         if (res.ok) {
           closeAddChildModal();
           fullGraphTreeData = null;
+          clearNodeCache();
           await loadNodeOnDemand(parentRel, true, 'forward');
           updateProgressStats();
+          updateNextNodeRecommendation(parentRel);
         } else {
           const err = await res.json();
           statusEl.textContent = `Error: ${err.error || 'Failed to create shortcut'}`;
@@ -1160,8 +1575,10 @@
       if (res.ok) {
         closeAddChildModal();
         fullGraphTreeData = null;
+        clearNodeCache();
         await loadNodeOnDemand(parentRel, true, 'forward');
         updateProgressStats();
+        updateNextNodeRecommendation(parentRel);
       } else {
         const err = await res.json();
         statusEl.textContent = `Error: ${err.error || 'Failed to create station'}`;
@@ -1250,7 +1667,7 @@
       if (res.ok && data.success) {
         closeRenameModal();
         fullGraphTreeData = null;
-        nodeCache = {};
+        clearNodeCache();
 
         const oldRel = targetStationActionRelPath;
         const newRel = data.newPath;
@@ -1266,11 +1683,12 @@
 
         const currentRel = getCurrentRelPath();
         if (currentRel === oldRel) {
-          await loadNodeOnDemand(newRel, false, 'none');
+          await loadNodeOnDemand(newRel, true, 'none');
         } else {
-          await loadNodeOnDemand(currentRel, false, 'none');
+          await loadNodeOnDemand(currentRel, true, 'none');
         }
         updateProgressStats();
+        updateNextNodeRecommendation(getCurrentRelPath());
       } else {
         statusEl.textContent = `Error: ${data.error || 'Failed to rename station'}`;
       }
@@ -1362,10 +1780,11 @@
         closeMoveModal();
         closeMarkdownModal();
         fullGraphTreeData = null;
-        nodeCache = {};
+        clearNodeCache();
 
-        await loadNodeOnDemand(data.newPath, false, 'forward');
+        await loadNodeOnDemand(data.newPath, true, 'forward');
         updateProgressStats();
+        updateNextNodeRecommendation(data.newPath);
       } else {
         statusEl.textContent = `Error: ${data.error || 'Failed to move station'}`;
       }
@@ -1445,11 +1864,13 @@
       if (res.ok && data.success) {
         closeShareModal();
         fullGraphTreeData = null;
+        clearNodeCache();
 
         const currentRel = getCurrentRelPath();
         if (currentRel === parentPath) {
           await loadNodeOnDemand(currentRel, true, 'forward');
         }
+        updateNextNodeRecommendation(currentRel);
       } else {
         statusEl.textContent = `Error: ${data.error || 'Failed to create shortcut'}`;
       }
@@ -1563,7 +1984,7 @@
         closeDeleteModal();
         closeMarkdownModal();
         fullGraphTreeData = null;
-        nodeCache = {};
+        clearNodeCache();
 
         const parts = targetStationActionRelPath.split('/');
         parts.pop();
@@ -1573,8 +1994,9 @@
           historyStack.pop();
         }
 
-        await loadNodeOnDemand(parentRel, false, 'backward');
+        await loadNodeOnDemand(parentRel, true, 'backward');
         updateProgressStats();
+        updateNextNodeRecommendation(parentRel);
       } else {
         statusEl.textContent = `Error: ${data.error || 'Failed to delete station'}`;
       }
@@ -2336,7 +2758,7 @@
         if (historyStack.length > 1) {
           const rootTitle = (nodeCache[''] && nodeCache[''].title) || historyStack[0].title || '';
           historyStack = [{ id: 'root', relPath: '', title: rootTitle }];
-          loadNodeOnDemand('', false, 'back');
+          loadNodeOnDemand('', true, 'back');
         }
       };
     }
@@ -2611,6 +3033,16 @@
     await loadNodeOnDemand('', false);
     updateProgressStats();
     updateNextNodeRecommendation('');
+
+    // Automatic change detection & live refresh
+    checkForDiskChanges();
+    setInterval(checkForDiskChanges, 1500);
+    window.addEventListener('focus', checkForDiskChanges);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        checkForDiskChanges();
+      }
+    });
   }
 
   if (document.readyState === 'loading') {
