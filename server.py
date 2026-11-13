@@ -1198,18 +1198,18 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
         needs_review = 0
         for root, dirs, files in os.walk(GRAPH_DIR):
             rpath = Path(root)
-            if rpath == GRAPH_DIR or rpath.name.startswith((".", "__")):
+            if rpath.name.startswith((".", "__")):
                 continue
             canonical_path, _, _ = self._resolve_shortcut(rpath)
             res = canonical_path.resolve()
             if res in visited_canonical:
                 continue
-            visited_canonical.add(res)
 
             info_file = canonical_path / "info.md"
             if info_file.exists():
+                visited_canonical.add(res)
                 try:
-                    _, _, status, _ = self._parse_info_md(info_file, rpath.name)
+                    _, _, status, _ = self._parse_info_md(info_file, rpath.name if rpath != GRAPH_DIR else "Knowledge Graph")
                     if status == "completed":
                         completed += 1
                     elif status == "needs-review":
@@ -1234,6 +1234,8 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             if rpath == GRAPH_DIR or rpath.name.startswith((".", "__")):
                 continue
             if (rpath / "shortcut.json").exists():
+                continue
+            if not (rpath / "info.md").exists():
                 continue
             rel = rpath.relative_to(GRAPH_DIR).as_posix()
             title, _, _, priority = self._parse_info_md(rpath / "info.md", rpath.name.replace("-", " ").replace("_", " ").title())

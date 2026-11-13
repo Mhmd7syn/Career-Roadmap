@@ -268,6 +268,10 @@
       statusEl.title = `Status: ${newStatus}. Click to cycle: To Do → In Progress → Done`;
     }
 
+    if (nodeCache[relPath]) {
+      nodeCache[relPath].status = newStatus;
+    }
+
     // 2. Secondary: Sync to disk and refresh dependent statistics in background
     try {
       const res = await fetch('/api/save-status', {
@@ -276,16 +280,15 @@
         body: JSON.stringify({ path: relPath, status: newStatus })
       });
       if (res.ok) {
-        clearNodeCache();
         const data = await res.json();
         if (data.node) {
           nodeCache[relPath] = data.node;
           currentNode = data.node;
           patchParentCardDOM(data.node);
         }
+        fullGraphTreeData = null;
         updateProgressStats();
         updateNextNodeRecommendation(relPath);
-        fullGraphTreeData = null;
       }
     } catch (err) {
       console.warn('Failed to save status to disk:', err);
@@ -308,6 +311,10 @@
       priorityEl.title = `Priority: ${newPriority}. Click to cycle: Normal → High → Low`;
     }
 
+    if (nodeCache[relPath]) {
+      nodeCache[relPath].priority = newPriority;
+    }
+
     // 2. Secondary: Sync to disk and refresh recommendation in background
     try {
       const res = await fetch('/api/save-priority', {
@@ -316,15 +323,14 @@
         body: JSON.stringify({ path: relPath, priority: newPriority })
       });
       if (res.ok) {
-        clearNodeCache();
         const data = await res.json();
         if (data.node) {
           nodeCache[relPath] = data.node;
           currentNode = data.node;
           patchParentCardDOM(data.node);
         }
-        updateNextNodeRecommendation(relPath);
         fullGraphTreeData = null;
+        updateNextNodeRecommendation(relPath);
       }
     } catch (err) {
       console.warn('Failed to save priority to disk:', err);
@@ -333,6 +339,12 @@
 
   async function setChildPriority(childRelPath, newPriority) {
     // 1. Priority: Immediate visual update of target child card (0ms latency)
+    if (currentNode && currentNode.children) {
+      const childObj = currentNode.children.find(c => c.relPath === childRelPath);
+      if (childObj) {
+        childObj.priority = newPriority;
+      }
+    }
     patchChildCardDOM(childRelPath, { priority: newPriority });
 
     const priorityEl = document.getElementById('md-modal-priority');
@@ -343,6 +355,10 @@
       priorityEl.title = `Priority: ${newPriority}. Click to cycle: Normal → High → Low`;
     }
 
+    if (nodeCache[childRelPath]) {
+      nodeCache[childRelPath].priority = newPriority;
+    }
+
     // 2. Secondary: Sync to disk and refresh recommendation in background
     try {
       const res = await fetch('/api/save-priority', {
@@ -351,14 +367,13 @@
         body: JSON.stringify({ path: childRelPath, priority: newPriority })
       });
       if (res.ok) {
-        clearNodeCache();
         const data = await res.json();
         if (data.node) {
           nodeCache[childRelPath] = data.node;
           patchChildCardDOM(childRelPath, data.node);
         }
-        updateNextNodeRecommendation(getCurrentRelPath());
         fullGraphTreeData = null;
+        updateNextNodeRecommendation(getCurrentRelPath());
       }
     } catch (err) {
       console.warn('Failed to save child priority to disk:', err);
@@ -367,6 +382,12 @@
 
   async function setChildStatus(childRelPath, newStatus) {
     // 1. Status: Immediate visual update of target child card (0ms latency)
+    if (currentNode && currentNode.children) {
+      const childObj = currentNode.children.find(c => c.relPath === childRelPath);
+      if (childObj) {
+        childObj.status = newStatus;
+      }
+    }
     patchChildCardDOM(childRelPath, { status: newStatus });
 
     const statusEl = document.getElementById('md-modal-status');
@@ -377,6 +398,10 @@
       statusEl.title = `Status: ${newStatus}. Click to cycle: To Do → In Progress → Done`;
     }
 
+    if (nodeCache[childRelPath]) {
+      nodeCache[childRelPath].status = newStatus;
+    }
+
     // 2. Secondary: Sync to disk and refresh progress & recommendation in background
     try {
       const res = await fetch('/api/save-status', {
@@ -385,15 +410,14 @@
         body: JSON.stringify({ path: childRelPath, status: newStatus })
       });
       if (res.ok) {
-        clearNodeCache();
         const data = await res.json();
         if (data.node) {
           nodeCache[childRelPath] = data.node;
           patchChildCardDOM(childRelPath, data.node);
         }
+        fullGraphTreeData = null;
         updateProgressStats();
         updateNextNodeRecommendation(getCurrentRelPath());
-        fullGraphTreeData = null;
       }
     } catch (err) {
       console.warn('Failed to save child status to disk:', err);
@@ -856,7 +880,8 @@
         'completed': 'todo',
         'needs-review': 'completed'
       };
-      setNodeStatus(nextMap[currentStatus] || 'todo');
+      const curStatus = (currentNode && currentNode.status) ? currentNode.status : 'todo';
+      setNodeStatus(nextMap[curStatus] || 'todo');
     };
 
     const btnPriorityToggle = document.getElementById('btn-priority-toggle');
@@ -867,7 +892,8 @@
           'high': 'low',
           'low': 'normal'
         };
-        setNodePriority(nextMap[currentPriority] || 'normal');
+        const curPrio = (currentNode && currentNode.priority) ? currentNode.priority : 'normal';
+        setNodePriority(nextMap[curPrio] || 'normal');
       };
     }
 
@@ -984,7 +1010,8 @@
         statusDotEl.onclick = (e) => {
           e.stopPropagation();
           const nextMap = { 'todo': 'in-progress', 'in-progress': 'completed', 'completed': 'todo', 'needs-review': 'completed' };
-          setChildStatus(child.relPath, nextMap[childStatus] || 'todo');
+          const curStatus = child.status || 'todo';
+          setChildStatus(child.relPath, nextMap[curStatus] || 'todo');
         };
       }
 
@@ -994,7 +1021,8 @@
         prioBtn.onclick = (e) => {
           e.stopPropagation();
           const nextMap = { 'normal': 'high', 'high': 'low', 'low': 'normal' };
-          setChildPriority(child.relPath, nextMap[childPriority] || 'normal');
+          const curPrio = child.priority || 'normal';
+          setChildPriority(child.relPath, nextMap[curPrio] || 'normal');
         };
       }
 
@@ -1089,15 +1117,14 @@
         statusEl.className = `btn-status-cycle modal-badge-pill status-${initialStatus}`;
         statusEl.textContent = formatStatus(initialStatus);
         statusEl.title = `Status: ${initialStatus}. Click to cycle: To Do → In Progress → Done`;
-        statusEl.onclick = async () => {
-          const curStatus = (nodeCache[relPath] && nodeCache[relPath].status) || initialStatus;
+        statusEl.onclick = () => {
+          const curStatus = (currentNode && currentNode.relPath === relPath)
+            ? (currentNode.status || 'todo')
+            : ((nodeCache[relPath] && nodeCache[relPath].status) || initialStatus);
           const nextMap = { 'todo': 'in-progress', 'in-progress': 'completed', 'completed': 'todo', 'needs-review': 'completed' };
           const nextStatus = nextMap[curStatus] || 'todo';
-          if (currentNode && currentNode.relPath === relPath) {
-            await setNodeStatus(nextStatus);
-          } else {
-            await setChildStatus(relPath, nextStatus);
-          }
+
+          // 1. Immediate visual flip (0ms latency)
           statusEl.className = `btn-status-cycle modal-badge-pill status-${nextStatus}`;
           statusEl.textContent = formatStatus(nextStatus);
           statusEl.title = `Status: ${nextStatus}. Click to cycle: To Do → In Progress → Done`;
@@ -1116,6 +1143,13 @@
             lastSavedContent = textarea.value;
             renderMarkdownContent(textarea.value, previewEl);
           }
+
+          // 2. Background non-blocking persistence
+          if (currentNode && currentNode.relPath === relPath) {
+            setNodeStatus(nextStatus);
+          } else {
+            setChildStatus(relPath, nextStatus);
+          }
         };
       } else {
         statusEl.style.display = 'none';
@@ -1131,15 +1165,14 @@
         priorityEl.className = `btn-priority-cycle priority-${initialPrio}`;
         priorityEl.textContent = formatPrio(initialPrio);
         priorityEl.title = `Priority: ${initialPrio}. Click to cycle: Normal → High → Low`;
-        priorityEl.onclick = async () => {
-          const curPrio = (nodeCache[relPath] && nodeCache[relPath].priority) || initialPrio;
+        priorityEl.onclick = () => {
+          const curPrio = (currentNode && currentNode.relPath === relPath)
+            ? (currentNode.priority || 'normal')
+            : ((nodeCache[relPath] && nodeCache[relPath].priority) || initialPrio);
           const nextMap = { 'normal': 'high', 'high': 'low', 'low': 'normal' };
           const nextPrio = nextMap[curPrio] || 'normal';
-          if (currentNode && currentNode.relPath === relPath) {
-            await setNodePriority(nextPrio);
-          } else {
-            await setChildPriority(relPath, nextPrio);
-          }
+
+          // 1. Immediate visual flip (0ms latency)
           priorityEl.className = `btn-priority-cycle priority-${nextPrio}`;
           priorityEl.textContent = formatPrio(nextPrio);
           priorityEl.title = `Priority: ${nextPrio}. Click to cycle: Normal → High → Low`;
@@ -1165,6 +1198,13 @@
             }
             lastSavedContent = textarea.value;
             renderMarkdownContent(textarea.value, previewEl);
+          }
+
+          // 2. Background non-blocking persistence
+          if (currentNode && currentNode.relPath === relPath) {
+            setNodePriority(nextPrio);
+          } else {
+            setChildPriority(relPath, nextPrio);
           }
         };
       } else {
@@ -1443,7 +1483,6 @@
         const data = await res.json();
         lastSavedContent = content;
         setAutosaveStatus('saved');
-        clearNodeCache();
         fullGraphTreeData = null;
 
         if (data.node) {

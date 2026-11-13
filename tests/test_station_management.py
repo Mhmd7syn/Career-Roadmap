@@ -118,6 +118,22 @@ class TestStationManagement(unittest.TestCase):
                 body = {"raw": str(e)}
             return status, body
 
+    def _get_json(self, endpoint: str) -> tuple[int, dict]:
+        url = f"{self.base_url}{endpoint}"
+        req = urllib.request.Request(url, method="GET")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                status = resp.getcode()
+                body = json.loads(resp.read().decode("utf-8"))
+                return status, body
+        except urllib.error.HTTPError as e:
+            status = e.code
+            try:
+                body = json.loads(e.read().decode("utf-8"))
+            except Exception:
+                body = {"raw": str(e)}
+            return status, body
+
     # -------------------------------------------------------------------------
     # 1. Station Renaming Tests
     # -------------------------------------------------------------------------
@@ -298,6 +314,46 @@ class TestStationManagement(unittest.TestCase):
         })
         self.assertEqual(status, 400)
         self.assertIn("Root station cannot be deleted", res.get("error", ""))
+
+    def test_progress_stats_includes_root_and_canonical_stations(self):
+        # Initial: root info.md does not exist yet; tech has status in-progress, swe todo, biz todo.
+        # swe-link is a shortcut to tech/swe so it shouldn't be counted twice.
+        status, res = self._get_json("/api/stats")
+        self.assertEqual(status, 200)
+        self.assertEqual(res["total"], 3)  # tech, swe, biz
+        self.assertEqual(res["completed"], 0)
+        self.assertEqual(res["percent"], 0)
+
+        # Mark root as completed
+        (self.test_graph_dir / "info.md").write_text("# Knowledge Graph\n\n**Status:** completed", encoding="utf-8")
+        status, res = self._get_json("/api/stats")
+        self.assertEqual(status, 200)
+        self.assertEqual(res["total"], 4)  # root, tech, swe, biz
+        self.assertEqual(res["completed"], 1)
+        self.assertEqual(res["percent"], 25)
+
+        # Mark swe as completed via save-status API
+        status, save_res = self._post_json("/api/save-status", {"path": "tech/swe", "status": "completed"})
+        self.assertEqual(status, 200)
+        status, res = self._get_json("/api/stats")
+        self.assertEqual(status, 200)
+        self.assertEqual(res["completed"], 2)
+        self.assertEqual(res["percent"], 50)
+
+    def test_get_stations_filters_shortcuts_and_folders_without_info(self):
+        # Create folder without info.md
+        (self.test_graph_dir / "tech" / "empty_folder").mkdir()
+
+        status, res = self._get_json("/api/stations")
+        self.assertEqual(status, 200)
+        station_paths = [s["relPath"] for s in res["stations"]]
+        # tech, tech/swe, and business have info.md
+        self.assertIn("tech", station_paths)
+        self.assertIn("tech/swe", station_paths)
+        self.assertIn("business", station_paths)
+        # swe-link is a shortcut, empty_folder has no info.md
+        self.assertNotIn("business/swe-link", station_paths)
+        self.assertNotIn("tech/empty_folder", station_paths)
 
 
 if __name__ == "__main__":
