@@ -573,41 +573,53 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
     CYCLE_SLOTS = ["high 1", "normal 1", "low 1", "high 2", "normal 2", "high 3"]
     _global_recommendation_step = 0
 
-    def _load_recommendation_queue(self, scope: str = "") -> dict | None:
-        """Load persisted recommendation queue from root node folder (.recommendation_queue.json)."""
-        queue_file = GRAPH_DIR / ".recommendation_queue.json"
+    def _get_queue_file(self) -> Path:
+        return GRAPH_DIR.parent / ".recommendation_queue.json"
+
+    def _load_recommendation_queue(self) -> dict:
+        """Load minimal persistent recommendation queue from root (.recommendation_queue.json)."""
+        legacy_file = GRAPH_DIR / ".recommendation_queue.json"
+        if legacy_file.exists():
+            try:
+                legacy_file.unlink()
+            except Exception:
+                pass
+
+        queue_file = self._get_queue_file()
+        default_data = {
+            "pattern": list(self.CYCLE_PATTERN),
+            "current_index": 0
+        }
         if not queue_file.exists():
-            return None
+            return default_data
         try:
             with open(queue_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            if isinstance(data, dict) and "scopes" in data:
-                return data["scopes"].get(scope)
-            if isinstance(data, dict) and data.get("scope") == scope:
-                return data
-            return None
+            if isinstance(data, dict):
+                pat = data.get("pattern", self.CYCLE_PATTERN)
+                if isinstance(pat, list) and pat:
+                    pattern = [str(p).lower() for p in pat]
+                else:
+                    pattern = list(self.CYCLE_PATTERN)
+                raw_idx = data.get("current_index", 0)
+                current_idx = int(raw_idx) if isinstance(raw_idx, (int, str)) and str(raw_idx).isdigit() else 0
+                return {
+                    "pattern": pattern,
+                    "current_index": current_idx % len(pattern)
+                }
         except Exception as e:
             print(f"[Warning reading recommendation queue]: {e}", file=sys.stderr)
-            return None
+        return default_data
 
-    def _save_recommendation_queue(self, scope: str, queue_data: dict):
-        """Save active recommendation queue to root node folder (.recommendation_queue.json)."""
-        queue_file = GRAPH_DIR / ".recommendation_queue.json"
+    def _save_recommendation_queue(self, queue_data: dict):
+        """Save minimal recommendation queue to root (.recommendation_queue.json)."""
+        queue_file = self._get_queue_file()
         try:
-            all_data = {"scopes": {}}
-            if queue_file.exists():
-                try:
-                    with open(queue_file, "r", encoding="utf-8") as f:
-                        existing = json.load(f)
-                        if isinstance(existing, dict) and "scopes" in existing:
-                            all_data = existing
-                        elif isinstance(existing, dict) and "scope" in existing:
-                            all_data["scopes"][existing["scope"]] = existing
-                except Exception:
-                    pass
-            all_data["scopes"][scope] = queue_data
+            pattern = queue_data.get("pattern", self.CYCLE_PATTERN)
+            curr_idx = queue_data.get("current_index", 0)
+            current_index = int(curr_idx) % len(pattern)
             with open(queue_file, "w", encoding="utf-8") as f:
-                json.dump(all_data, f, indent=2)
+                json.dump({"pattern": pattern, "current_index": current_index}, f, indent=2)
         except Exception as e:
             print(f"[Warning saving recommendation queue]: {e}", file=sys.stderr)
 
@@ -686,230 +698,38 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
         return high_candidates, normal_candidates, low_candidates
 
-    def _interleave_cadence_slots(self, high_list: list[dict], normal_list: list[dict], low_list: list[dict]) -> list[dict | None]:
-        """
-        Interleave candidates into 6-slot 3H+2N+1L cadence:
-        [high 1, normal 1, low 1, high 2, normal 2, high 3]
-        """
-        slots = [None] * 6
-        h_tmp = list(high_list)
-        n_tmp = list(normal_list)
-        l_tmp = list(low_list)
-
-        if h_tmp: slots[0] = h_tmp.pop(0)  # high 1
-        if n_tmp: slots[1] = n_tmp.pop(0)  # normal 1
-        if l_tmp: slots[2] = l_tmp.pop(0)  # low 1
-        if h_tmp: slots[3] = h_tmp.pop(0)  # high 2
-        if n_tmp: slots[4] = n_tmp.pop(0)  # normal 2
-        if h_tmp: slots[5] = h_tmp.pop(0)  # high 3
-
-        return slots
-
-    def _build_recommendation_queue_for_scope(self, start_dir: Path, existing: dict | None = None) -> dict:
-        """
-        Build or refresh the persistent recommendation queue for a scope:
-        - Scans all uncompleted nodes into high, normal, low lists
-        - Interleaves active pool into the 3H+2N+1L 6-slot batch
-        - Preserves existing cadence progress (step and last_completed)
-        """
-        scope = start_dir.relative_to(GRAPH_DIR).as_posix() if start_dir != GRAPH_DIR else ""
-        high_cands, normal_cands, low_cands = self._collect_uncompleted_candidates(start_dir)
-
-        step = 0
-        last_completed = None
-        if existing and isinstance(existing, dict):
-            step = existing.get("step", 0) % 6
-            last_completed = existing.get("last_completed")
-
-        # Check if existing has active slots with uncompleted stations
-        old_slots = existing.get("slots", []) if existing else []
-        uncompleted_in_old = 0
-        active_paths = set()
-
-        if old_slots:
-            synced_slots = []
-            for sl in old_slots:
-                if not sl:
-                    synced_slots.append(None)
-                    continue
-                sl_path = sl.get("relPath", "")
-                sl_dir = GRAPH_DIR / sl_path if sl_path else GRAPH_DIR
-                if not sl_dir.exists():
-                    synced_slots.append(None)
-                    continue
-                c_canon, is_sc, target_rel = self._resolve_shortcut(sl_dir)
-                t, b, s, p = self._parse_info_md(c_canon / "info.md", sl_dir.name)
-                breadcrumbs = self._build_breadcrumbs(sl_dir)
-                category = breadcrumbs[-2]["title"] if len(breadcrumbs) > 1 else "Root"
-                node_obj = {
-                    "id": sl_dir.name if sl_dir != GRAPH_DIR else "root",
-                    "title": t,
-                    "badge": b,
-                    "status": s,
-                    "priority": p,
-                    "isShortcut": is_sc,
-                    "canonicalRelPath": target_rel if is_sc else sl_path,
-                    "relPath": sl_path,
-                    "category": category,
-                    "breadcrumbs": breadcrumbs,
-                    "isCurrentNode": (sl_dir == start_dir)
-                }
-                synced_slots.append(node_obj)
-                if s != "completed":
-                    uncompleted_in_old += 1
-                    active_paths.add(sl_path)
-            old_slots = synced_slots
-
-        # If we have an active batch with uncompleted stations, preserve their slot assignments
-        # while accommodating any priority changes or empty slots
-        if uncompleted_in_old > 0:
-            slots = list(old_slots)
-            # Check for priority changes: if a station's priority changed, relocate it
-            for idx, sl in enumerate(slots):
-                if sl and sl.get("status") != "completed":
-                    expected_prio = self.CYCLE_PATTERN[idx]
-                    actual_prio = sl.get("priority", "normal")
-                    if actual_prio != expected_prio:
-                        target_indices = [i for i, p in enumerate(self.CYCLE_PATTERN) if p == actual_prio and (slots[i] is None or slots[i].get("status") == "completed")]
-                        if target_indices:
-                            target_idx = target_indices[0]
-                            slots[idx] = None
-                            slots[target_idx] = sl
-
-            # Fill empty slots (slots that are None) from uncompleted candidates of that priority
-            for idx in range(6):
-                if slots[idx] is None:
-                    target_prio = self.CYCLE_PATTERN[idx]
-                    cand_pool = high_cands if target_prio == "high" else (low_cands if target_prio == "low" else normal_cands)
-                    for cand in cand_pool:
-                        if cand["relPath"] not in active_paths:
-                            slots[idx] = cand
-                            active_paths.add(cand["relPath"])
-                            break
-        else:
-            slots = self._interleave_cadence_slots(high_cands, normal_cands, low_cands)
-
-        next_slot = self.CYCLE_SLOTS[step]
-
-        return {
-            "scope": scope,
-            "step": step,
-            "last_completed": last_completed,
-            "next_slot": next_slot,
-            "queues": {
-                "high": high_cands,
-                "normal": normal_cands,
-                "low": low_cands
-            },
-            "slots": slots,
-            "createdAt": existing.get("createdAt") if (existing and "createdAt" in existing) else datetime.now().isoformat(),
-            "updatedAt": datetime.now().isoformat()
-        }
-
-    def _refresh_all_recommendation_queues(self):
-        """
-        Refresh active recommendation queues across all scopes after any node modification
-        (priority update, node added, renamed, moved, or deleted).
-        """
-        queue_file = GRAPH_DIR / ".recommendation_queue.json"
-        scopes_to_refresh = {""}
-        all_data = {"scopes": {}}
-
-        if queue_file.exists():
-            try:
-                with open(queue_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if isinstance(data, dict) and "scopes" in data:
-                    all_data = data
-                    for s in data["scopes"]:
-                        scopes_to_refresh.add(s)
-                elif isinstance(data, dict) and "scope" in data:
-                    scopes_to_refresh.add(data["scope"])
-            except Exception:
-                pass
-
-        for sc in list(scopes_to_refresh):
-            sc_dir = GRAPH_DIR / sc if sc else GRAPH_DIR
-            if sc_dir.exists() and sc_dir.is_dir():
-                curr_state = all_data.get("scopes", {}).get(sc)
-                refreshed = self._build_recommendation_queue_for_scope(sc_dir, curr_state)
-                all_data.setdefault("scopes", {})[sc] = refreshed
-            elif sc in all_data.get("scopes", {}):
-                del all_data["scopes"][sc]
-
-        try:
-            with open(queue_file, "w", encoding="utf-8") as f:
-                json.dump(all_data, f, indent=2)
-        except Exception as e:
-            print(f"[Warning saving refreshed recommendation queue]: {e}", file=sys.stderr)
-
     def _record_node_completion(self, node_dir: Path):
         """
-        Advance cadence step and update last_completed slot when a station is marked completed.
+        When a node is marked completed:
+        If its priority matches the current needed index, increase the index.
+        Otherwise discard the change.
         """
-        rel_p = node_dir.relative_to(GRAPH_DIR).as_posix() if node_dir != GRAPH_DIR else ""
         c_canon, _, _ = self._resolve_shortcut(node_dir)
         _, _, _, prio = self._parse_info_md(c_canon / "info.md", node_dir.name)
-        prio = prio.lower() if prio in ("high", "normal", "low") else "normal"
+        node_prio = prio.lower() if prio in ("high", "normal", "low") else "normal"
 
-        queue_file = GRAPH_DIR / ".recommendation_queue.json"
-        all_data = {"scopes": {}}
-        if queue_file.exists():
-            try:
-                with open(queue_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if isinstance(data, dict) and "scopes" in data:
-                    all_data = data
-            except Exception:
-                pass
+        q_data = self._load_recommendation_queue()
+        pattern = q_data.get("pattern", self.CYCLE_PATTERN)
+        curr_idx = q_data.get("current_index", 0) % len(pattern)
+        needed_prio = pattern[curr_idx]
 
-        if "" not in all_data.get("scopes", {}):
-            all_data.setdefault("scopes", {})[""] = self._build_recommendation_queue_for_scope(GRAPH_DIR)
-
-        for sc, sc_data in all_data.get("scopes", {}).items():
-            if sc == "" or rel_p == sc or rel_p.startswith(sc + "/"):
-                slots = sc_data.get("slots", [])
-                curr_step = sc_data.get("step", 0) % 6
-                matched_idx = None
-                for idx, sl in enumerate(slots):
-                    if sl and sl.get("relPath") == rel_p:
-                        matched_idx = idx
-                        break
-
-                if matched_idx is not None:
-                    completed_slot = self.CYCLE_SLOTS[matched_idx]
-                    next_step = (matched_idx + 1) % 6
-                else:
-                    target_idx = curr_step
-                    for offset in range(6):
-                        chk = (curr_step + offset) % 6
-                        if self.CYCLE_PATTERN[chk] == prio:
-                            target_idx = chk
-                            break
-                    completed_slot = self.CYCLE_SLOTS[target_idx]
-                    next_step = (target_idx + 1) % 6
-
-                sc_data["last_completed"] = completed_slot
-                sc_data["step"] = next_step
-                sc_data["next_slot"] = self.CYCLE_SLOTS[next_step]
-                GraphRequestHandler._global_recommendation_step = next_step
-
-        try:
-            with open(queue_file, "w", encoding="utf-8") as f:
-                json.dump(all_data, f, indent=2)
-        except Exception as e:
-            print(f"[Warning saving completed recommendation state]: {e}", file=sys.stderr)
-
-        self._refresh_all_recommendation_queues()
+        if node_prio == needed_prio:
+            new_idx = (curr_idx + 1) % len(pattern)
+            self._save_recommendation_queue({
+                "pattern": pattern,
+                "current_index": new_idx
+            })
+            print(f"[Cadence advanced]: Completed '{node_prio}' matched needed slot {self.CYCLE_SLOTS[curr_idx]}. Index advanced to {new_idx}.")
+        else:
+            print(f"[Cadence kept]: Completed '{node_prio}' did not match needed '{needed_prio}' (slot {self.CYCLE_SLOTS[curr_idx]}). Discarded index change.")
 
     def _find_next_node_bfs(self, start_dir: Path, step: int | None = None) -> dict:
         """
         Priority-weighted recommendation engine:
-        - Manages persistent queue of all stations partitioned into high, normal, low.
-        - Refreshes on priority edits, node additions, deletions, renames, and moves.
-        - Tracks last_completed slot (e.g. 'high 1', 'normal 1', 'high 2') and advances cadence.
-        - Interleaves active batch into 3H+2N+1L cadence: [high 1, normal 1, low 1, high 2, normal 2, high 3].
-        - Selects candidate based on cadence step (with graceful circular fallbacks).
+        - Reads global queue (pattern and current_index).
+        - Gathers first uncompleted high, normal, low nodes under start_dir.
+        - If needed priority has no node, advances index until finding an available candidate.
+        - If no nodes exist for all priorities, marks as all completed.
         """
         if not start_dir.exists() or not start_dir.is_dir():
             s_val = (step % 6) if step is not None else 0
@@ -931,135 +751,81 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 "message": "Station directory does not exist."
             }
 
-        scope = start_dir.relative_to(GRAPH_DIR).as_posix() if start_dir != GRAPH_DIR else ""
-        existing = self._load_recommendation_queue(scope)
+        q_data = self._load_recommendation_queue()
+        pattern = q_data.get("pattern", self.CYCLE_PATTERN)
+        saved_idx = q_data.get("current_index", 0) % len(pattern)
+        curr_idx = (step % len(pattern)) if step is not None else saved_idx
 
-        if not existing or "slots" not in existing or "queues" not in existing:
-            existing = self._build_recommendation_queue_for_scope(start_dir)
-            self._save_recommendation_queue(scope, existing)
+        high_cands, normal_cands, low_cands = self._collect_uncompleted_candidates(start_dir)
+        total_candidates = len(high_cands) + len(normal_cands) + len(low_cands)
 
-        # Validate saved slots against disk state
-        saved_slots = existing.get("slots", [])
-        validated_slots = []
-        uncompleted_in_batch = 0
-
-        for item in saved_slots:
-            if not item:
-                validated_slots.append(None)
-                continue
-
-            rel_p = item.get("relPath", "")
-            node_dir = GRAPH_DIR / rel_p if rel_p else GRAPH_DIR
-            if not node_dir.exists():
-                validated_slots.append(None)
-                continue
-
-            c_canon, is_sc, target_rel = self._resolve_shortcut(node_dir)
-            info_file = c_canon / "info.md"
-            default_t = node_dir.name.replace("-", " ").replace("_", " ").title() if node_dir != GRAPH_DIR else "Root"
-            t, b, s, p = self._parse_info_md(info_file, default_t)
-            breadcrumbs = self._build_breadcrumbs(node_dir)
-            category = breadcrumbs[-2]["title"] if len(breadcrumbs) > 1 else "Root"
-
-            node_obj = {
-                "id": node_dir.name if node_dir != GRAPH_DIR else "root",
-                "title": t,
-                "badge": b,
-                "status": s,
-                "priority": p,
-                "isShortcut": is_sc,
-                "canonicalRelPath": target_rel if is_sc else rel_p,
-                "relPath": rel_p,
-                "category": category,
-                "breadcrumbs": breadcrumbs,
-                "isCurrentNode": (node_dir == start_dir)
-            }
-            validated_slots.append(node_obj)
-            if s != "completed":
-                uncompleted_in_batch += 1
-
-        # If active batch is completely depleted, refill next batch from remaining uncompleted candidates
-        if uncompleted_in_batch == 0:
-            existing = self._build_recommendation_queue_for_scope(start_dir, existing)
-            self._save_recommendation_queue(scope, existing)
-            validated_slots = existing.get("slots", [])
-            uncompleted_in_batch = sum(1 for s in validated_slots if s and s.get("status") != "completed")
-
-        active_pool = [s for s in validated_slots if s is not None and s.get("status") != "completed"]
-
-        if not active_pool:
-            s_val = (step % 6) if step is not None else (existing.get("step", 0) % 6)
+        if total_candidates == 0:
+            eff_slot = self.CYCLE_SLOTS[curr_idx] if curr_idx < len(self.CYCLE_SLOTS) else f"{pattern[curr_idx]} {curr_idx+1}"
+            prev_slot = self.CYCLE_SLOTS[(curr_idx - 1) % len(pattern)] if len(self.CYCLE_SLOTS) == len(pattern) else None
+            nxt_slot = self.CYCLE_SLOTS[(curr_idx + 1) % len(pattern)] if len(self.CYCLE_SLOTS) == len(pattern) else None
             return {
                 "found": False,
                 "isCurrentNode": False,
                 "allCompleted": True,
                 "node": None,
                 "pool": [],
-                "cycleStep": s_val,
-                "cycleTarget": self.CYCLE_PATTERN[s_val],
-                "cycleSlot": self.CYCLE_SLOTS[s_val],
-                "lastCompletedSlot": existing.get("last_completed"),
-                "nextSlot": existing.get("next_slot", self.CYCLE_SLOTS[(s_val + 1) % 6]),
-                "cyclePattern": self.CYCLE_PATTERN,
+                "cycleStep": curr_idx,
+                "cycleTarget": pattern[curr_idx],
+                "cycleSlot": eff_slot,
+                "lastCompletedSlot": prev_slot,
+                "nextSlot": nxt_slot,
+                "cyclePattern": pattern,
                 "cycleSlots": self.CYCLE_SLOTS,
                 "poolCounts": {"high": 0, "normal": 0, "low": 0},
                 "totalCandidates": 0,
                 "message": "All stations in this section completed!"
             }
 
-        req_step = (step % 6) if step is not None else (existing.get("step", 0) % 6)
+        first_high = high_cands[0] if high_cands else None
+        first_normal = normal_cands[0] if normal_cands else None
+        first_low = low_cands[0] if low_cands else None
 
-        # Select candidate for requested step with graceful wrap fallback
-        recommended = None
-        effective_step = req_step
-        for offset in range(6):
-            check_idx = (req_step + offset) % 6
-            cand = validated_slots[check_idx] if check_idx < len(validated_slots) else None
-            if cand and cand.get("status") != "completed":
-                recommended = cand
-                effective_step = check_idx
+        chosen_node = None
+        for _ in range(len(pattern)):
+            needed_prio = pattern[curr_idx]
+            if needed_prio == "high" and first_high:
+                chosen_node = first_high
                 break
+            elif needed_prio == "normal" and first_normal:
+                chosen_node = first_normal
+                break
+            elif needed_prio == "low" and first_low:
+                chosen_node = first_low
+                break
+            else:
+                curr_idx = (curr_idx + 1) % len(pattern)
 
-        if recommended is None:
-            recommended = active_pool[0]
-            effective_step = req_step
+        if step is None and curr_idx != saved_idx:
+            self._save_recommendation_queue({"pattern": pattern, "current_index": curr_idx})
 
-        existing["slots"] = validated_slots
-        self._save_recommendation_queue(scope, existing)
-
-        high_count = sum(1 for s in active_pool if s.get("priority") == "high")
-        normal_count = sum(1 for s in active_pool if s.get("priority") == "normal")
-        low_count = sum(1 for s in active_pool if s.get("priority") == "low")
-
-        q_dict = existing.get("queues", {})
-        total_candidates = sum(len(q_dict.get(k, [])) for k in ("high", "normal", "low")) or len(active_pool)
+        cycle_slot = self.CYCLE_SLOTS[curr_idx] if curr_idx < len(self.CYCLE_SLOTS) else f"{pattern[curr_idx]} {curr_idx+1}"
+        prev_slot = self.CYCLE_SLOTS[(curr_idx - 1) % len(pattern)] if len(self.CYCLE_SLOTS) == len(pattern) else None
+        next_slot = self.CYCLE_SLOTS[(curr_idx + 1) % len(pattern)] if len(self.CYCLE_SLOTS) == len(pattern) else None
 
         return {
             "found": True,
-            "isCurrentNode": recommended.get("isCurrentNode", False) if recommended else False,
+            "isCurrentNode": chosen_node.get("isCurrentNode", False) if chosen_node else False,
             "allCompleted": False,
-            "node": recommended,
-            "pool": active_pool,
-            "cycleStep": effective_step,
-            "cycleTarget": self.CYCLE_PATTERN[effective_step],
-            "cycleSlot": self.CYCLE_SLOTS[effective_step],
-            "lastCompletedSlot": existing.get("last_completed"),
-            "nextSlot": existing.get("next_slot", self.CYCLE_SLOTS[(effective_step + 1) % 6]),
-            "cyclePattern": self.CYCLE_PATTERN,
+            "node": chosen_node,
+            "pool": [chosen_node] if chosen_node else [],
+            "cycleStep": curr_idx,
+            "cycleTarget": pattern[curr_idx],
+            "cycleSlot": cycle_slot,
+            "lastCompletedSlot": prev_slot,
+            "nextSlot": next_slot,
+            "cyclePattern": pattern,
             "cycleSlots": self.CYCLE_SLOTS,
             "poolCounts": {
-                "high": high_count,
-                "normal": normal_count,
-                "low": low_count
+                "high": len(high_cands),
+                "normal": len(normal_cands),
+                "low": len(low_cands)
             },
-            "queueCounts": {
-                "high": len(q_dict.get("high", [])),
-                "normal": len(q_dict.get("normal", [])),
-                "low": len(q_dict.get("low", []))
-            },
-            "queues": q_dict,
-            "totalCandidates": total_candidates,
-            "isPersistedBatch": True
+            "totalCandidates": total_candidates
         }
 
     def _search_graph(self, query: str, limit: int = 30) -> tuple[list[dict], int]:
@@ -1420,7 +1186,7 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     m_notes = m_canonical / "notes.md"
                     modal_version = int((m_info.stat().st_mtime if m_info.exists() else 0) + (m_notes.stat().st_mtime if m_notes.exists() else 0))
 
-            queue_file = GRAPH_DIR / ".recommendation_queue.json"
+            queue_file = self._get_queue_file()
             q_mtime = int(queue_file.stat().st_mtime) if queue_file.exists() else 0
 
             version_token = f"{sum(mtimes)}:{len(mtimes)}:{modal_version}:{q_mtime}"
@@ -1623,7 +1389,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             with open(info_file, "w", encoding="utf-8") as f:
                 f.write(content)
 
-            self._refresh_all_recommendation_queues()
             print(f"[info.md Saved]: {info_file} ({len(content)} chars)")
             self._send_json(200, {
                 "success": True,
@@ -1667,8 +1432,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._update_status_in_info_md(info_file, status)
             if status == "completed":
                 self._record_node_completion(node_dir)
-            else:
-                self._refresh_all_recommendation_queues()
             print(f"[Status Saved in info.md]: {info_file} -> {status}")
 
             self._send_json(200, {
@@ -1689,7 +1452,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             info_file = canonical_dir / "info.md"
 
             self._update_priority_in_info_md(info_file, priority)
-            self._refresh_all_recommendation_queues()
             print(f"[Priority Saved in info.md]: {info_file} -> {priority}")
 
             self._send_json(200, {
@@ -1748,7 +1510,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 with open(child_dir / "shortcut.json", "w", encoding="utf-8") as f:
                     json.dump(shortcut_data, f, indent=2)
 
-                self._refresh_all_recommendation_queues()
                 print(f"[Shortcut Created]: {child_dir} -> {canonical_target_rel}")
                 self._send_json(200, {
                     "success": True,
@@ -1795,7 +1556,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             with open(child_dir / "notes.md", "w", encoding="utf-8") as f:
                 f.write(notes_content)
 
-            self._refresh_all_recommendation_queues()
             print(f"[Child Created]: {child_dir} under {parent_path}")
             self._send_json(200, {
                 "success": True,
@@ -1900,7 +1660,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     affected_shortcuts = self._update_shortcuts_for_relocated_node(old_rel, new_rel)
 
             print(f"[Node Renamed]: {old_rel} -> {new_rel} (is_shortcut={is_shortcut})")
-            self._refresh_all_recommendation_queues()
             self._send_json(200, {
                 "success": True,
                 "message": f"Station renamed to '{safe_slug}'",
@@ -1938,7 +1697,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
 
             if is_shortcut:
                 shutil.rmtree(target_dir)
-                self._refresh_all_recommendation_queues()
                 print(f"[Shortcut Deleted]: {rel_path}")
                 self._send_json(200, {
                     "success": True,
@@ -1978,7 +1736,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                     except Exception as e:
                         print(f"[Warning: Failed to clean dangling shortcut {sc_rel}]: {e}", file=sys.stderr)
 
-            self._refresh_all_recommendation_queues()
             print(f"[Node Deleted]: {rel_path} (force={force}, cleaned_shortcuts={len(cleaned_shortcuts)})")
             self._send_json(200, {
                 "success": True,
@@ -2051,7 +1808,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 affected_shortcuts = self._update_shortcuts_for_relocated_node(old_rel, new_rel)
 
             print(f"[Node Moved]: {old_rel} -> {new_rel} (affected_shortcuts={len(affected_shortcuts)})")
-            self._refresh_all_recommendation_queues()
             self._send_json(200, {
                 "success": True,
                 "message": f"Station moved to '{new_rel}'",
@@ -2116,7 +1872,6 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
                 json.dump(shortcut_data, f, indent=2)
 
             print(f"[Node Shared]: Created shortcut at {shortcut_dir} pointing to {canonical_target_rel}")
-            self._refresh_all_recommendation_queues()
             self._send_json(200, {
                 "success": True,
                 "message": f"Shortcut created pointing to '{canonical_target_rel}'",

@@ -217,25 +217,20 @@ class TestPriorityRecommendation(unittest.TestCase):
         self.assertEqual(rec["priority"], "high")
         self.assertEqual(rec["id"], "high_1")
 
-        # Check candidate pool
-        pool = data["pool"]
-        self.assertEqual(len(pool), 6)
-        self.assertEqual(data["poolCounts"]["high"], 3)
-        self.assertEqual(data["poolCounts"]["normal"], 2)
-        self.assertEqual(data["poolCounts"]["low"], 1)
-
-        # Pool items verification: Interleaved 3H+2N+1L cadence: [H1, N1, L1, H2, N2, H3]
-        pool_ids = [n["id"] for n in pool]
-        self.assertEqual(pool_ids, ["high_1", "normal_1", "low_1", "high_2", "normal_2", "high_3"])
+        # Candidate counts
+        self.assertEqual(data["poolCounts"]["high"], 4)
+        self.assertEqual(data["poolCounts"]["normal"], 3)
+        self.assertEqual(data["poolCounts"]["low"], 2)
+        self.assertEqual(data["totalCandidates"], 9)
 
         # Test step cadence: High -> Normal -> Low -> High -> Normal -> High
         expected_cadence = [
             (0, "high", "high_1"),
             (1, "normal", "normal_1"),
             (2, "low", "low_1"),
-            (3, "high", "high_2"),
-            (4, "normal", "normal_2"),
-            (5, "high", "high_3"),
+            (3, "high", "high_1"),
+            (4, "normal", "normal_1"),
+            (5, "high", "high_1"),
             (6, "high", "high_1")  # wraps back to step 0
         ]
         for step, exp_prio, exp_id in expected_cadence:
@@ -283,67 +278,64 @@ class TestPriorityRecommendation(unittest.TestCase):
     def test_queue_persistence_across_restarts_and_batch_depletion(self):
         """
         Verify:
-        1. Recommendation queue is persisted to .recommendation_queue.json in root folder.
-        2. Submitting requests repeatedly (simulating dashboard reload or server restart) preserves the active batch without refilling.
-        3. Only when all stations in the active batch are completed does it refill a new batch.
+        1. Minimal queue (pattern and current_index) is persisted to .recommendation_queue.json outside graph folder.
+        2. Advancing index on matching priority completion.
+        3. Discarding index change on non-matching priority completion.
         """
         persist_dir = self.test_graph_dir / "persistence_test"
         persist_dir.mkdir(parents=True, exist_ok=True)
         (persist_dir / "info.md").write_text("# Persistence Test\n\n**Status:** completed\n", encoding="utf-8")
 
-        # Create 6 High nodes (H1..H6) and 4 Normal nodes (N1..N4)
-        for i in range(1, 7):
+        for i in range(1, 4):
             d = persist_dir / f"phigh_{i}"
             d.mkdir(parents=True, exist_ok=True)
             (d / "info.md").write_text(f"# PHigh {i}\n\n**Status:** todo\n**Priority:** high\n", encoding="utf-8")
 
-        for i in range(1, 5):
+        for i in range(1, 3):
             d = persist_dir / f"pnorm_{i}"
             d.mkdir(parents=True, exist_ok=True)
             (d / "info.md").write_text(f"# PNorm {i}\n\n**Status:** todo\n**Priority:** normal\n", encoding="utf-8")
 
-        # 1. First fetch creates batch
+        # 1. First fetch finds high_1 at step 0
         p_path = urllib.parse.quote("persistence_test")
-        _, data1 = self._get(f"/api/next-node?path={p_path}&step=0")
+        _, data1 = self._get(f"/api/next-node?path={p_path}")
         self.assertTrue(data1["found"])
-        first_batch_ids = [n["id"] for n in data1["pool"]]
-        self.assertEqual(len(first_batch_ids), 5)  # 3 High + 2 Normal (0 Low)
+        self.assertEqual(data1["node"]["id"], "phigh_1")
+        self.assertEqual(data1["cycleStep"], 0)
 
-        # 2. Check that .recommendation_queue.json was created on disk in root folder
-        queue_file = self.test_graph_dir / ".recommendation_queue.json"
+        # 2. Check that .recommendation_queue.json is saved OUTSIDE graph folder
+        queue_file = self.test_graph_dir.parent / ".recommendation_queue.json"
         self.assertTrue(queue_file.exists())
+        with open(queue_file, "r", encoding="utf-8") as f:
+            q_state = json.load(f)
+        self.assertIn("pattern", q_state)
+        self.assertIn("current_index", q_state)
+        self.assertNotIn("queues", q_state)
+        self.assertNotIn("slots", q_state)
 
-        # 3. Subsequent query (simulating page reload) preserves the EXACT same batch
-        _, data2 = self._get(f"/api/next-node?path={p_path}&step=1")
-        self.assertTrue(data2.get("isPersistedBatch"))
-        second_batch_ids = [n["id"] for n in data2["pool"]]
-        self.assertEqual(second_batch_ids, first_batch_ids)
+        # 3. Complete phigh_1 (matching priority 'high' for index 0) -> advances index to 1 (normal)
+        self._post("/api/save-status", {"path": "persistence_test/phigh_1", "status": "completed"})
+        with open(queue_file, "r", encoding="utf-8") as f:
+            q_state2 = json.load(f)
+        self.assertEqual(q_state2["current_index"], 1)
 
-        # 4. Complete phigh_1: batch should keep remaining 4 stations and NOT refill H4 or N3 yet!
-        (persist_dir / "phigh_1" / "info.md").write_text("# PHigh 1\n\n**Status:** completed\n**Priority:** high\n", encoding="utf-8")
-        _, data3 = self._get(f"/api/next-node?path={p_path}&step=1")
-        remaining_ids = [n["id"] for n in data3["pool"]]
-        self.assertNotIn("phigh_1", remaining_ids)
-        self.assertNotIn("phigh_4", remaining_ids)  # Must NOT refill prematurely!
-        self.assertEqual(len(remaining_ids), 4)
+        # Next query now seeks normal node at index 1 -> recommends pnorm_1
+        _, data2 = self._get(f"/api/next-node?path={p_path}")
+        self.assertEqual(data2["node"]["id"], "pnorm_1")
+        self.assertEqual(data2["cycleStep"], 1)
 
-        # 5. Complete all remaining stations in the first batch
-        for bid in remaining_ids:
-            (persist_dir / bid / "info.md").write_text(f"# {bid}\n\n**Status:** completed\n", encoding="utf-8")
-
-        # 6. Now that the first batch is fully completed, query MUST refill a fresh batch!
-        _, data4 = self._get(f"/api/next-node?path={p_path}&step=0")
-        self.assertTrue(data4["found"])
-        refilled_ids = [n["id"] for n in data4["pool"]]
-        # Refilled batch should now draw the next uncompleted nodes (phigh_4..6, pnorm_3..4)
-        self.assertIn("phigh_4", refilled_ids)
-        self.assertIn("pnorm_3", refilled_ids)
+        # 4. Out-of-order completion: complete phigh_2 while current needed index is 1 (normal)
+        # Priority does NOT match needed priority 'normal' -> change must be discarded!
+        self._post("/api/save-status", {"path": "persistence_test/phigh_2", "status": "completed"})
+        with open(queue_file, "r", encoding="utf-8") as f:
+            q_state3 = json.load(f)
+        self.assertEqual(q_state3["current_index"], 1)  # Index kept at 1, not corrupted!
 
     def test_queue_refreshed_after_priority_edit(self):
         """
         Verify:
         When a node's priority is edited via /api/save-priority,
-        the recommendation queue immediately refreshes and updates the candidate order.
+        next recommendation dynamically finds the newly prioritized node without stale cache.
         """
         sandbox = self.test_graph_dir / "refresh_prio_test"
         sandbox.mkdir(parents=True, exist_ok=True)
@@ -358,7 +350,7 @@ class TestPriorityRecommendation(unittest.TestCase):
         (n2 / "info.md").write_text("# Node Beta\n\n**Status:** todo\n**Priority:** normal\n", encoding="utf-8")
 
         p_path = urllib.parse.quote("refresh_prio_test")
-        _, init_data = self._get(f"/api/next-node?path={p_path}")
+        _, init_data = self._get(f"/api/next-node?path={p_path}&step=1")
         self.assertEqual(init_data["node"]["id"], "node_alpha")
 
         # Promote node_beta to high priority
@@ -368,18 +360,8 @@ class TestPriorityRecommendation(unittest.TestCase):
         })
         self.assertEqual(status, 200)
 
-        # Verify .recommendation_queue.json refreshed on disk
-        queue_file = self.test_graph_dir / ".recommendation_queue.json"
-        self.assertTrue(queue_file.exists())
-        with open(queue_file, "r", encoding="utf-8") as f:
-            q_data = json.load(f)
-        scope_q = q_data["scopes"].get("refresh_prio_test")
-        self.assertIsNotNone(scope_q)
-        high_ids = [n["id"] for n in scope_q["queues"]["high"]]
-        self.assertIn("node_beta", high_ids)
-
-        # Next recommendation must immediately recommend node_beta as high 1
-        _, next_data = self._get(f"/api/next-node?path={p_path}")
+        # Next recommendation at high step must immediately recommend node_beta
+        _, next_data = self._get(f"/api/next-node?path={p_path}&step=0")
         self.assertEqual(next_data["node"]["id"], "node_beta")
         self.assertEqual(next_data["node"]["priority"], "high")
         self.assertEqual(next_data["cycleSlot"], "high 1")
@@ -387,7 +369,7 @@ class TestPriorityRecommendation(unittest.TestCase):
     def test_queue_refreshed_after_adding_new_node(self):
         """
         Verify:
-        Adding a new child station via /api/add-child immediately refreshes the saved queue.
+        Adding a new child station via /api/add-child is immediately discovered dynamically.
         """
         sandbox = self.test_graph_dir / "refresh_add_test"
         sandbox.mkdir(parents=True, exist_ok=True)
@@ -403,15 +385,6 @@ class TestPriorityRecommendation(unittest.TestCase):
             "name": "New Station"
         })
         self.assertEqual(status, 200)
-
-        # Verify .recommendation_queue.json refreshed on disk
-        queue_file = self.test_graph_dir / ".recommendation_queue.json"
-        with open(queue_file, "r", encoding="utf-8") as f:
-            q_data = json.load(f)
-        scope_q = q_data["scopes"].get("refresh_add_test")
-        self.assertIsNotNone(scope_q)
-        normal_ids = [n["id"] for n in scope_q["queues"]["normal"]]
-        self.assertIn("new-station", normal_ids)
 
         # Recommendation immediately finds new station
         _, next_data = self._get(f"/api/next-node?path={p_path}")
@@ -489,7 +462,7 @@ class TestPriorityRecommendation(unittest.TestCase):
         _, d6 = self._get(f"/api/next-node?path={p_path}")
         self.assertTrue(d6.get("allCompleted"))
         self.assertEqual(d6["lastCompletedSlot"], "high 3")
-        self.assertEqual(d6["nextSlot"], "high 1")
+        self.assertEqual(d6["nextSlot"], "normal 1")
 
     def test_ui_markup_and_css_priority_support(self):
         html = (BASE_DIR / "web" / "index.html").read_text(encoding="utf-8")
