@@ -102,6 +102,20 @@ class TestOverflowMenuAndTags(unittest.TestCase):
         self.assertIn(".dropdown-item-danger", self.css_content)
         self.assertIn(".dropdown-divider", self.css_content)
 
+    def test_css_parent_anchor_stacks_above_children_anchor(self):
+        """Verify parent anchor and card stack strictly above child anchor so dropdown overlays child nodes."""
+        parent_anchor_match = re.search(r'\.graph-parent-anchor\s*\{[^}]*z-index:\s*(\d+)', self.css_content)
+        children_anchor_match = re.search(r'\.graph-children-anchor\s*\{[^}]*z-index:\s*(\d+)', self.css_content)
+        self.assertIsNotNone(parent_anchor_match, "z-index must be set on .graph-parent-anchor")
+        self.assertIsNotNone(children_anchor_match, "z-index must be set on .graph-children-anchor")
+        parent_z = int(parent_anchor_match.group(1))
+        children_z = int(children_anchor_match.group(1))
+        self.assertGreater(
+            parent_z,
+            children_z,
+            f"Expected .graph-parent-anchor z-index ({parent_z}) to be greater than .graph-children-anchor ({children_z})"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
