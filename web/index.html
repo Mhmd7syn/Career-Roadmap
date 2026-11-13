@@ -111,6 +111,7 @@
           <div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <h2 class="summary-modal-title" id="md-modal-title">info.md</h2>
+              <button type="button" class="btn-status-cycle" id="md-modal-status" style="display: none;" title="Cycle status: To Do → In Progress → Done">○ To Do</button>
               <button type="button" class="btn-priority-cycle" id="md-modal-priority" style="display: none;">Normal</button>
             </div>
             <span class="summary-modal-path" id="md-modal-path">graph/...</span>
@@ -133,12 +134,30 @@
             <button class="btn-tab" id="btn-tab-edit">✏️ Edit</button>
           </div>
 
-          <!-- Station Lifecycle Actions: Rename, Move, Share, Delete -->
-          <div class="station-modal-actions" id="station-modal-actions">
-            <button type="button" class="btn-station-tool" id="btn-modal-rename-station" title="Rename station title & folder slug">✏️ Rename</button>
-            <button type="button" class="btn-station-tool" id="btn-modal-move-station" title="Move station to another parent hub">📁 Move</button>
-            <button type="button" class="btn-station-tool" id="btn-modal-share-station" title="Create shortcut link under another parent">↗ Share</button>
-            <button type="button" class="btn-station-tool btn-station-tool-danger" id="btn-modal-delete-station" title="Delete station">🗑️ Delete</button>
+          <!-- Station Lifecycle Actions: 3-Dot Overflow Menu -->
+          <div class="station-overflow-container" id="station-modal-actions">
+            <button type="button" class="btn-station-tool btn-station-overflow" id="btn-modal-overflow" title="More station actions" aria-label="Station actions menu" aria-haspopup="true" aria-expanded="false">
+              <span class="overflow-dots">⋮</span>
+            </button>
+            <div class="station-dropdown-menu" id="modal-station-overflow-dropdown" role="menu" style="display: none;">
+              <button type="button" class="dropdown-item" id="btn-modal-rename-station" role="menuitem">
+                <span class="dropdown-item-icon">✏️</span>
+                <span>Rename</span>
+              </button>
+              <button type="button" class="dropdown-item" id="btn-modal-move-station" role="menuitem">
+                <span class="dropdown-item-icon">📁</span>
+                <span>Move</span>
+              </button>
+              <button type="button" class="dropdown-item" id="btn-modal-share-station" role="menuitem">
+                <span class="dropdown-item-icon">↗</span>
+                <span>Share</span>
+              </button>
+              <div class="dropdown-divider"></div>
+              <button type="button" class="dropdown-item dropdown-item-danger" id="btn-modal-delete-station" role="menuitem">
+                <span class="dropdown-item-icon">🗑️</span>
+                <span>Delete</span>
+              </button>
+            </div>
           </div>
 
           <div class="autosave-status saved" id="autosave-status" title="Edits are automatically saved">

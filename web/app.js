@@ -260,6 +260,14 @@
     currentNode.status = newStatus;
     patchParentCardDOM({ status: newStatus });
 
+    const statusEl = document.getElementById('md-modal-status');
+    if (statusEl && activeModalNodeRelPath === relPath) {
+      const formatStatus = (s) => s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Review' : '○ To Do'));
+      statusEl.className = `btn-status-cycle modal-badge-pill status-${newStatus}`;
+      statusEl.textContent = formatStatus(newStatus);
+      statusEl.title = `Status: ${newStatus}. Click to cycle: To Do → In Progress → Done`;
+    }
+
     // 2. Secondary: Sync to disk and refresh dependent statistics in background
     try {
       const res = await fetch('/api/save-status', {
@@ -354,6 +362,41 @@
       }
     } catch (err) {
       console.warn('Failed to save child priority to disk:', err);
+    }
+  }
+
+  async function setChildStatus(childRelPath, newStatus) {
+    // 1. Status: Immediate visual update of target child card (0ms latency)
+    patchChildCardDOM(childRelPath, { status: newStatus });
+
+    const statusEl = document.getElementById('md-modal-status');
+    if (statusEl && activeModalNodeRelPath === childRelPath) {
+      const formatStatus = (s) => s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Review' : '○ To Do'));
+      statusEl.className = `btn-status-cycle modal-badge-pill status-${newStatus}`;
+      statusEl.textContent = formatStatus(newStatus);
+      statusEl.title = `Status: ${newStatus}. Click to cycle: To Do → In Progress → Done`;
+    }
+
+    // 2. Secondary: Sync to disk and refresh progress & recommendation in background
+    try {
+      const res = await fetch('/api/save-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: childRelPath, status: newStatus })
+      });
+      if (res.ok) {
+        clearNodeCache();
+        const data = await res.json();
+        if (data.node) {
+          nodeCache[childRelPath] = data.node;
+          patchChildCardDOM(childRelPath, data.node);
+        }
+        updateProgressStats();
+        updateNextNodeRecommendation(getCurrentRelPath());
+        fullGraphTreeData = null;
+      }
+    } catch (err) {
+      console.warn('Failed to save child status to disk:', err);
     }
   }
 
@@ -566,10 +609,18 @@
       const btnStatus = document.getElementById('btn-status-toggle');
       if (btnStatus) {
         const s = data.status;
-        const label = s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Needs Review' : '○ To Do'));
+        const label = s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Review' : '○ To Do'));
         btnStatus.className = `btn-status-cycle status-${s}`;
         btnStatus.textContent = label;
         btnStatus.title = s === 'needs-review' ? 'Needs review after 1 month. Click to mark reviewed and completed' : 'Cycle status: To Do → In Progress → Done';
+      }
+      const modalStatus = document.getElementById('md-modal-status');
+      if (modalStatus && activeModalNodeRelPath === (data.relPath || (currentNode && currentNode.relPath))) {
+        const s = data.status;
+        const label = s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Review' : '○ To Do'));
+        modalStatus.className = `btn-status-cycle modal-badge-pill status-${s}`;
+        modalStatus.textContent = label;
+        modalStatus.title = `Status: ${s}. Click to cycle: To Do → In Progress → Done`;
       }
     }
 
@@ -581,6 +632,14 @@
         btnPriority.className = `btn-priority-cycle priority-${p}`;
         btnPriority.textContent = label;
         btnPriority.title = 'Cycle priority: Normal → High → Low → Normal';
+      }
+      const modalPriority = document.getElementById('md-modal-priority');
+      if (modalPriority && activeModalNodeRelPath === (data.relPath || (currentNode && currentNode.relPath))) {
+        const p = data.priority;
+        const label = p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
+        modalPriority.className = `btn-priority-cycle priority-${p}`;
+        modalPriority.textContent = label;
+        modalPriority.title = `Priority: ${p}. Click to cycle: Normal → High → Low`;
       }
     }
 
@@ -600,7 +659,12 @@
             btnFiles.textContent = `📁 Extra Files (${count})`;
             btnFiles.title = `View ${count} extra files`;
             btnFiles.onclick = () => openExtraFilesModal(currentNode || data);
-            actionsContainer.insertBefore(btnFiles, actionsContainer.firstChild);
+            const overflowContainer = actionsContainer.querySelector('.station-overflow-container');
+            if (overflowContainer) {
+              actionsContainer.insertBefore(btnFiles, overflowContainer);
+            } else {
+              actionsContainer.appendChild(btnFiles);
+            }
           }
         }
       } else if (btnFiles) {
@@ -636,10 +700,18 @@
       const dot = childEl.querySelector('.child-status-dot');
       if (dot) {
         dot.className = `child-status-dot ${s}`;
+        dot.title = `Status: ${s}. Click to cycle`;
       }
       const spline = document.querySelector(`.graph-svg-path[data-child-rel-path="${childRelPath}"]`);
       if (spline) {
         spline.setAttribute('class', `graph-svg-path ${s}`);
+      }
+      const modalStatus = document.getElementById('md-modal-status');
+      if (modalStatus && activeModalNodeRelPath === childRelPath) {
+        const label = s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Review' : '○ To Do'));
+        modalStatus.className = `btn-status-cycle modal-badge-pill status-${s}`;
+        modalStatus.textContent = label;
+        modalStatus.title = `Status: ${s}. Click to cycle: To Do → In Progress → Done`;
       }
     }
 
@@ -751,11 +823,31 @@
       ? `<button class="btn-graph-action btn-graph-files" id="btn-parent-extra-files" title="View ${extraFilesCount} extra files">📁 Extra Files (${extraFilesCount})</button>`
       : '';
 
-    const stationMgmtButtonsHtml = !isRoot ? `
-      <button class="btn-graph-action btn-graph-rename" id="btn-parent-rename" title="Rename station title & slug">✏️ Rename</button>
-      <button class="btn-graph-action btn-graph-move" id="btn-parent-move" title="Move station to another parent hub">📁 Move</button>
-      <button class="btn-graph-action btn-graph-share" id="btn-parent-share" title="Create shortcut link in another hub">↗ Share</button>
-      <button class="btn-graph-action btn-graph-delete" id="btn-parent-delete" title="Delete station">🗑️ Delete</button>
+    const stationOverflowMenuHtml = !isRoot ? `
+      <div class="station-overflow-container" id="parent-overflow-container">
+        <button type="button" class="btn-graph-action btn-graph-overflow" id="btn-parent-overflow" title="More station actions" aria-label="Station actions menu" aria-haspopup="true" aria-expanded="false">
+          <span class="overflow-dots">⋮</span>
+        </button>
+        <div class="station-dropdown-menu" id="parent-overflow-dropdown" role="menu" style="display: none;">
+          <button type="button" class="dropdown-item" id="btn-parent-rename" role="menuitem">
+            <span class="dropdown-item-icon">✏️</span>
+            <span>Rename</span>
+          </button>
+          <button type="button" class="dropdown-item" id="btn-parent-move" role="menuitem">
+            <span class="dropdown-item-icon">📁</span>
+            <span>Move</span>
+          </button>
+          <button type="button" class="dropdown-item" id="btn-parent-share" role="menuitem">
+            <span class="dropdown-item-icon">↗</span>
+            <span>Share</span>
+          </button>
+          <div class="dropdown-divider"></div>
+          <button type="button" class="dropdown-item dropdown-item-danger" id="btn-parent-delete" role="menuitem">
+            <span class="dropdown-item-icon">🗑️</span>
+            <span>Delete</span>
+          </button>
+        </div>
+      </div>
     ` : '';
 
     // 1. Render Parent Node Card
@@ -763,7 +855,7 @@
       <div class="graph-parent-card" data-rel-path="${currentNode.relPath || ''}">
         <div class="graph-parent-top-row">
           <button class="btn-status-cycle status-${currentStatus}" id="btn-status-toggle" title="${currentStatus === 'needs-review' ? 'Needs review after 1 month. Click to mark reviewed and completed' : 'Cycle status: To Do → In Progress → Done'}">
-            ${currentStatus === 'completed' ? '● Done' : (currentStatus === 'in-progress' ? '◐ In Progress' : (currentStatus === 'needs-review' ? '⚠ Needs Review' : '○ To Do'))}
+            ${currentStatus === 'completed' ? '● Done' : (currentStatus === 'in-progress' ? '◐ In Progress' : (currentStatus === 'needs-review' ? '⚠ Review' : '○ To Do'))}
           </button>
           ${priorityBtnHtml}
           ${shortcutBadgeHtml}
@@ -775,7 +867,7 @@
           <button class="btn-graph-action btn-graph-notes" id="btn-parent-notes" title="View & edit notes.md">📝 Notes</button>
           ${shortcutJumpBtnHtml}
           ${extraFilesBtnHtml}
-          ${stationMgmtButtonsHtml}
+          ${stationOverflowMenuHtml}
         </div>
       </div>
     `;
@@ -823,17 +915,56 @@
       btnFiles.onclick = () => openExtraFilesModal(currentNode);
     }
 
+    const btnParentOverflow = document.getElementById('btn-parent-overflow');
+    const parentDropdown = document.getElementById('parent-overflow-dropdown');
+    if (btnParentOverflow && parentDropdown) {
+      btnParentOverflow.onclick = (e) => {
+        e.stopPropagation();
+        const isOpen = parentDropdown.style.display !== 'none';
+        closeAllOverflowDropdowns();
+        if (!isOpen) {
+          parentDropdown.style.display = 'flex';
+          btnParentOverflow.setAttribute('aria-expanded', 'true');
+          btnParentOverflow.classList.add('active');
+        }
+      };
+    }
+
     const btnRename = document.getElementById('btn-parent-rename');
-    if (btnRename) btnRename.onclick = () => openRenameModal(currentNode.relPath);
+    if (btnRename) {
+      btnRename.onclick = (e) => {
+        e.stopPropagation();
+        closeAllOverflowDropdowns();
+        openRenameModal(currentNode.relPath);
+      };
+    }
 
     const btnMove = document.getElementById('btn-parent-move');
-    if (btnMove) btnMove.onclick = () => openMoveModal(currentNode.relPath);
+    if (btnMove) {
+      btnMove.onclick = (e) => {
+        e.stopPropagation();
+        closeAllOverflowDropdowns();
+        openMoveModal(currentNode.relPath);
+      };
+    }
 
     const btnShare = document.getElementById('btn-parent-share');
-    if (btnShare) btnShare.onclick = () => openShareModal(currentNode.relPath);
+    if (btnShare) {
+      btnShare.onclick = (e) => {
+        e.stopPropagation();
+        closeAllOverflowDropdowns();
+        openShareModal(currentNode.relPath);
+      };
+    }
 
     const btnDelete = document.getElementById('btn-parent-delete');
-    if (btnDelete) btnDelete.onclick = () => openDeleteModal(currentNode.relPath);
+    if (btnDelete) {
+      btnDelete.onclick = (e) => {
+        e.stopPropagation();
+        closeAllOverflowDropdowns();
+        openDeleteModal(currentNode.relPath);
+      };
+    }
 
     // 2. Render Immediate Child Stations
     childrenAnchor.innerHTML = '';
@@ -862,7 +993,7 @@
           : (childStatus === 'needs-review' ? 'needs-review' : 'todo'));
 
       nodeEl.innerHTML = `
-        <span class="child-status-dot ${dotClass}"></span>
+        <span class="child-status-dot ${dotClass}" title="Status: ${childStatus}. Click to cycle"></span>
         <span class="child-index">${String(index + 1).padStart(2, '0')}</span>
         <span class="child-node-title" title="${child.title}">${child.title}</span>
         ${priorityBadge}
@@ -870,6 +1001,16 @@
         ${branchBadge}
         <button class="btn-child-quick-info" title="Quick view info.md">ℹ️</button>
       `;
+
+      // Quick Status Cycle on Child Dot
+      const statusDotEl = nodeEl.querySelector('.child-status-dot');
+      if (statusDotEl) {
+        statusDotEl.onclick = (e) => {
+          e.stopPropagation();
+          const nextMap = { 'todo': 'in-progress', 'in-progress': 'completed', 'completed': 'todo', 'needs-review': 'completed' };
+          setChildStatus(child.relPath, nextMap[childStatus] || 'todo');
+        };
+      }
 
       // Quick Priority Cycle Button
       const prioBtn = nodeEl.querySelector('.child-priority-badge');
@@ -948,18 +1089,62 @@
 
     activeModalNodeRelPath = relPath;
     activeDocType = docType;
+    closeAllOverflowDropdowns();
 
     const overlay = document.getElementById('markdown-modal-overlay');
     const titleEl = document.getElementById('md-modal-title');
     const pathEl = document.getElementById('md-modal-path');
     const iconEl = document.getElementById('md-modal-icon');
     const previewEl = document.getElementById('md-rendered-view');
+    const statusEl = document.getElementById('md-modal-status');
     const priorityEl = document.getElementById('md-modal-priority');
 
     const filename = docType === 'info' ? 'info.md' : 'notes.md';
     titleEl.textContent = `${filename}`;
     pathEl.textContent = `graph/${relPath ? relPath + '/' : ''}${filename}`;
     iconEl.textContent = docType === 'info' ? 'ℹ️' : '📝';
+
+    if (statusEl) {
+      if (relPath && relPath !== 'root') {
+        const cachedNodeInitial = nodeCache[relPath];
+        const initialStatus = (cachedNodeInitial && cachedNodeInitial.status) || (currentNode && currentNode.relPath === relPath ? currentNode.status : 'todo');
+        const formatStatus = (s) => s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Review' : '○ To Do'));
+        statusEl.style.display = 'inline-flex';
+        statusEl.className = `btn-status-cycle modal-badge-pill status-${initialStatus}`;
+        statusEl.textContent = formatStatus(initialStatus);
+        statusEl.title = `Status: ${initialStatus}. Click to cycle: To Do → In Progress → Done`;
+        statusEl.onclick = async () => {
+          const curStatus = (nodeCache[relPath] && nodeCache[relPath].status) || initialStatus;
+          const nextMap = { 'todo': 'in-progress', 'in-progress': 'completed', 'completed': 'todo', 'needs-review': 'completed' };
+          const nextStatus = nextMap[curStatus] || 'todo';
+          if (currentNode && currentNode.relPath === relPath) {
+            await setNodeStatus(nextStatus);
+          } else {
+            await setChildStatus(relPath, nextStatus);
+          }
+          statusEl.className = `btn-status-cycle modal-badge-pill status-${nextStatus}`;
+          statusEl.textContent = formatStatus(nextStatus);
+          statusEl.title = `Status: ${nextStatus}. Click to cycle: To Do → In Progress → Done`;
+
+          // Keep editor and preview in sync with updated status
+          if (textarea && textarea.value) {
+            const statPatt = /(\*\*Status:\*\*\s*)([a-zA-Z0-9_\-]+)/i;
+            if (statPatt.test(textarea.value)) {
+              textarea.value = textarea.value.replace(statPatt, `$1${nextStatus}`);
+            } else {
+              const statPatt2 = /(status:\s*)([a-zA-Z0-9_\-]+)/i;
+              if (statPatt2.test(textarea.value)) {
+                textarea.value = textarea.value.replace(statPatt2, `$1${nextStatus}`);
+              }
+            }
+            lastSavedContent = textarea.value;
+            renderMarkdownContent(textarea.value, previewEl);
+          }
+        };
+      } else {
+        statusEl.style.display = 'none';
+      }
+    }
 
     if (priorityEl) {
       if (relPath && relPath !== 'root') {
@@ -1024,6 +1209,12 @@
       if (res.ok) {
         const data = await res.json();
         nodeCache[relPath] = data;
+        if (statusEl && data.status) {
+          const formatStatus = (s) => s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Review' : '○ To Do'));
+          statusEl.className = `btn-status-cycle modal-badge-pill status-${data.status}`;
+          statusEl.textContent = formatStatus(data.status);
+          statusEl.title = `Status: ${data.status}. Click to cycle: To Do → In Progress → Done`;
+        }
         if (priorityEl && data.priority) {
           const formatPrio = (p) => p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
           priorityEl.className = `btn-priority-cycle priority-${data.priority}`;
@@ -1057,6 +1248,7 @@
   }
 
   async function closeMarkdownModal() {
+    closeAllOverflowDropdowns();
     if (autoSaveTimer) {
       clearTimeout(autoSaveTimer);
       autoSaveTimer = null;
@@ -1285,6 +1477,14 @@
             patchParentCardDOM(data.node);
           } else if (currentNode && currentNode.children && currentNode.children.some(c => c.relPath === relPath)) {
             patchChildCardDOM(relPath, data.node);
+          }
+
+          const statusEl = document.getElementById('md-modal-status');
+          if (statusEl && data.node.status) {
+            const formatStatus = (s) => s === 'completed' ? '● Done' : (s === 'in-progress' ? '◐ In Progress' : (s === 'needs-review' ? '⚠ Review' : '○ To Do'));
+            statusEl.className = `btn-status-cycle modal-badge-pill status-${data.node.status}`;
+            statusEl.textContent = formatStatus(data.node.status);
+            statusEl.title = `Status: ${data.node.status}. Click to cycle: To Do → In Progress → Done`;
           }
 
           const priorityEl = document.getElementById('md-modal-priority');
@@ -2749,6 +2949,16 @@
   // 11. Event Listeners & Bootstrapping
   // ---------------------------------------------------------------------------
 
+  function closeAllOverflowDropdowns() {
+    document.querySelectorAll('.station-dropdown-menu').forEach((menu) => {
+      menu.style.display = 'none';
+    });
+    document.querySelectorAll('.btn-graph-overflow, .btn-station-overflow').forEach((btn) => {
+      btn.setAttribute('aria-expanded', 'false');
+      btn.classList.remove('active');
+    });
+  }
+
   function setupEventListeners() {
     setupSearch();
     setupFullGraphInteractions();
@@ -2910,31 +3120,54 @@
       };
     }
 
-    // Station Management Header Actions (in Markdown modal)
+    // Station Management Header Actions: 3-Dot Overflow Menu (in Markdown modal)
+    const btnModalOverflow = document.getElementById('btn-modal-overflow');
+    const modalDropdown = document.getElementById('modal-station-overflow-dropdown');
+    if (btnModalOverflow && modalDropdown) {
+      btnModalOverflow.onclick = (e) => {
+        e.stopPropagation();
+        const isOpen = modalDropdown.style.display !== 'none';
+        closeAllOverflowDropdowns();
+        if (!isOpen) {
+          modalDropdown.style.display = 'flex';
+          btnModalOverflow.setAttribute('aria-expanded', 'true');
+          btnModalOverflow.classList.add('active');
+        }
+      };
+    }
+
     const btnModalRename = document.getElementById('btn-modal-rename-station');
     if (btnModalRename) {
-      btnModalRename.onclick = () => {
+      btnModalRename.onclick = (e) => {
+        e.stopPropagation();
+        closeAllOverflowDropdowns();
         if (activeModalNodeRelPath) openRenameModal(activeModalNodeRelPath);
       };
     }
 
     const btnModalMove = document.getElementById('btn-modal-move-station');
     if (btnModalMove) {
-      btnModalMove.onclick = () => {
+      btnModalMove.onclick = (e) => {
+        e.stopPropagation();
+        closeAllOverflowDropdowns();
         if (activeModalNodeRelPath) openMoveModal(activeModalNodeRelPath);
       };
     }
 
     const btnModalShare = document.getElementById('btn-modal-share-station');
     if (btnModalShare) {
-      btnModalShare.onclick = () => {
+      btnModalShare.onclick = (e) => {
+        e.stopPropagation();
+        closeAllOverflowDropdowns();
         if (activeModalNodeRelPath) openShareModal(activeModalNodeRelPath);
       };
     }
 
     const btnModalDelete = document.getElementById('btn-modal-delete-station');
     if (btnModalDelete) {
-      btnModalDelete.onclick = () => {
+      btnModalDelete.onclick = (e) => {
+        e.stopPropagation();
+        closeAllOverflowDropdowns();
         if (activeModalNodeRelPath) openDeleteModal(activeModalNodeRelPath);
       };
     }
@@ -3007,6 +3240,13 @@
       };
     }
 
+    // Click outside to dismiss any open overflow menus
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.station-overflow-container')) {
+        closeAllOverflowDropdowns();
+      }
+    });
+
     // Keyboard Shortcuts (Ctrl+S / Cmd+S, Escape)
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -3016,6 +3256,13 @@
           saveMarkdownToDisk();
         }
       } else if (e.key === 'Escape') {
+        const openDropdowns = Array.from(document.querySelectorAll('.station-dropdown-menu'))
+          .filter(m => m.style.display !== 'none');
+        if (openDropdowns.length > 0) {
+          e.stopPropagation();
+          closeAllOverflowDropdowns();
+          return;
+        }
         closeMarkdownModal();
         closeExtractModal();
         closeAddChildModal();
