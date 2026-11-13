@@ -1154,6 +1154,11 @@ class GraphRequestHandler(SimpleHTTPRequestHandler):
             self._handle_api_get_root()
             return
 
+        if path == "/favicon.ico":
+            self.send_response(204)
+            self.end_headers()
+            return
+
         super().do_GET()
 
     def _handle_api_get_node(self, query_string: str):

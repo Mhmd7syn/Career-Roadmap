@@ -164,6 +164,60 @@
     renderCurrentView();
   }
 
+  async function setNodePriority(newPriority) {
+    if (!currentNode) return;
+
+    currentNode.priority = newPriority;
+    const relPath = currentNode.relPath;
+
+    try {
+      const res = await fetch('/api/save-priority', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: relPath, priority: newPriority })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.node) {
+          nodeCache[relPath] = data.node;
+          currentNode = data.node;
+        }
+        updateNextNodeRecommendation(relPath);
+        fullGraphTreeData = null;
+      }
+    } catch (err) {
+      console.warn('Failed to save priority to disk:', err);
+    }
+
+    renderCurrentView();
+  }
+
+  async function setChildPriority(childRelPath, newPriority) {
+    try {
+      const res = await fetch('/api/save-priority', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: childRelPath, priority: newPriority })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.node) {
+          nodeCache[childRelPath] = data.node;
+        }
+        if (currentNode && currentNode.children) {
+          const ch = currentNode.children.find(c => c.relPath === childRelPath);
+          if (ch) ch.priority = newPriority;
+        }
+        updateNextNodeRecommendation(getCurrentRelPath());
+        fullGraphTreeData = null;
+      }
+    } catch (err) {
+      console.warn('Failed to save child priority to disk:', err);
+    }
+
+    renderCurrentView();
+  }
+
   async function updateNextNodeRecommendation(relPath = '') {
     const nextPill = document.getElementById('next-node-pill');
     const nextLabel = document.getElementById('next-node-label');
@@ -191,7 +245,7 @@
         if (nextPriority) {
           nextPriority.style.display = 'inline-block';
           nextPriority.className = `next-node-priority-badge priority-${priority}`;
-          nextPriority.textContent = priority.toUpperCase();
+          nextPriority.textContent = priority === 'normal' ? 'normal' : priority.toUpperCase();
         }
 
         const cadenceInfo = ` [Step ${stepNum}/6 • 3H+2N+1L Cadence]`;
@@ -359,8 +413,8 @@
     const badgeText = currentNode.badge || '';
     const isParentShortcut = currentNode.isShortcut || false;
     const isRoot = !currentNode.relPath || currentNode.relPath === 'root';
-    const priorityBadgeHtml = !isRoot
-      ? `<span class="badge-priority priority-${currentPriority}" title="Priority: ${currentPriority}">${currentPriority.toUpperCase()}</span>`
+    const priorityBtnHtml = !isRoot
+      ? `<button class="btn-priority-cycle priority-${currentPriority}" id="btn-priority-toggle" title="Cycle priority: Normal → High → Low → Normal">${currentPriority === 'high' ? '▲ High' : (currentPriority === 'low' ? '▼ Low' : 'Normal')}</button>`
       : '';
     const shortcutBadgeHtml = isParentShortcut
       ? `<span class="badge-shortcut" title="Linked to ${currentNode.canonicalRelPath}">↗ Shared from ${currentNode.canonicalRelPath}</span>`
@@ -376,7 +430,6 @@
       ? `<button class="btn-graph-action btn-graph-files" id="btn-parent-extra-files" title="View ${extraFilesCount} extra files">📁 Extra Files (${extraFilesCount})</button>`
       : '';
 
-    const isRoot = !currentNode.relPath || currentNode.relPath === 'root';
     const stationMgmtButtonsHtml = !isRoot ? `
       <button class="btn-graph-action btn-graph-rename" id="btn-parent-rename" title="Rename station title & slug">✏️ Rename</button>
       <button class="btn-graph-action btn-graph-move" id="btn-parent-move" title="Move station to another parent hub">📁 Move</button>
@@ -391,7 +444,7 @@
           <button class="btn-status-cycle status-${currentStatus}" id="btn-status-toggle" title="${currentStatus === 'needs-review' ? 'Needs review after 1 month. Click to mark reviewed and completed' : 'Cycle status: To Do → In Progress → Done'}">
             ${currentStatus === 'completed' ? '● Done' : (currentStatus === 'in-progress' ? '◐ In Progress' : (currentStatus === 'needs-review' ? '⚠ Needs Review' : '○ To Do'))}
           </button>
-          ${priorityBadgeHtml}
+          ${priorityBtnHtml}
           ${shortcutBadgeHtml}
           ${badgeText ? `<span style="font-size: 0.72rem; color: var(--accent-blue); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">${badgeText}</span>` : ''}
         </div>
@@ -416,6 +469,18 @@
       };
       setNodeStatus(nextMap[currentStatus] || 'todo');
     };
+
+    const btnPriorityToggle = document.getElementById('btn-priority-toggle');
+    if (btnPriorityToggle) {
+      btnPriorityToggle.onclick = () => {
+        const nextMap = {
+          'normal': 'high',
+          'high': 'low',
+          'low': 'normal'
+        };
+        setNodePriority(nextMap[currentPriority] || 'normal');
+      };
+    }
 
     document.getElementById('btn-parent-info').onclick = () => {
       openMarkdownModal(currentNode.relPath, 'info');
@@ -460,7 +525,8 @@
       const branchBadge = child.hasChildren ? '<span class="child-branch-indicator" title="Contains sub-stations">⑂</span>' : '';
       const isChildShortcut = child.isShortcut || false;
       const shortcutIndicator = isChildShortcut ? `<span class="child-shortcut-indicator" title="Shortcut to ${child.canonicalRelPath || child.title}">↗</span>` : '';
-      const priorityBadge = `<span class="child-priority-badge priority-${childPriority}" title="Priority: ${childPriority}">${childPriority.toUpperCase()}</span>`;
+      const priorityLabel = childPriority === 'high' ? '▲ High' : (childPriority === 'low' ? '▼ Low' : 'normal');
+      const priorityBadge = `<button type="button" class="child-priority-badge priority-${childPriority}" title="Priority: ${childPriority}. Click to change">${priorityLabel}</button>`;
 
       const nodeEl = document.createElement('div');
       nodeEl.className = `graph-child-node ${isChildShortcut ? 'is-shortcut' : ''} ${direction === 'forward' ? 'spawning' : ''}`;
@@ -482,6 +548,16 @@
         ${branchBadge}
         <button class="btn-child-quick-info" title="Quick view info.md">ℹ️</button>
       `;
+
+      // Quick Priority Cycle Button
+      const prioBtn = nodeEl.querySelector('.child-priority-badge');
+      if (prioBtn) {
+        prioBtn.onclick = (e) => {
+          e.stopPropagation();
+          const nextMap = { 'normal': 'high', 'high': 'low', 'low': 'normal' };
+          setChildPriority(child.relPath, nextMap[childPriority] || 'normal');
+        };
+      }
 
       // Quick Info Button opens info.md
       const quickBtn = nodeEl.querySelector('.btn-child-quick-info');
@@ -564,11 +640,23 @@
     iconEl.textContent = docType === 'info' ? 'ℹ️' : '📝';
 
     if (priorityEl) {
-      const cachedNodeInitial = nodeCache[relPath];
-      if (cachedNodeInitial && cachedNodeInitial.priority) {
-        priorityEl.style.display = 'inline-block';
-        priorityEl.className = `badge-priority priority-${cachedNodeInitial.priority}`;
-        priorityEl.textContent = cachedNodeInitial.priority.toUpperCase();
+      if (relPath && relPath !== 'root') {
+        const cachedNodeInitial = nodeCache[relPath];
+        const initialPrio = (cachedNodeInitial && cachedNodeInitial.priority) || 'normal';
+        const formatPrio = (p) => p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
+        priorityEl.style.display = 'inline-flex';
+        priorityEl.className = `btn-priority-cycle priority-${initialPrio}`;
+        priorityEl.textContent = formatPrio(initialPrio);
+        priorityEl.title = `Priority: ${initialPrio}. Click to cycle: Normal → High → Low`;
+        priorityEl.onclick = async () => {
+          const curPrio = (nodeCache[relPath] && nodeCache[relPath].priority) || initialPrio;
+          const nextMap = { 'normal': 'high', 'high': 'low', 'low': 'normal' };
+          const nextPrio = nextMap[curPrio] || 'normal';
+          await setChildPriority(relPath, nextPrio);
+          priorityEl.className = `btn-priority-cycle priority-${nextPrio}`;
+          priorityEl.textContent = formatPrio(nextPrio);
+          priorityEl.title = `Priority: ${nextPrio}. Click to cycle: Normal → High → Low`;
+        };
       } else {
         priorityEl.style.display = 'none';
       }
@@ -592,9 +680,10 @@
           const data = await res.json();
           nodeCache[relPath] = data;
           if (priorityEl && data.priority) {
-            priorityEl.style.display = 'inline-block';
-            priorityEl.className = `badge-priority priority-${data.priority}`;
-            priorityEl.textContent = data.priority.toUpperCase();
+            const formatPrio = (p) => p === 'high' ? '▲ High' : (p === 'low' ? '▼ Low' : 'Normal');
+            priorityEl.className = `btn-priority-cycle priority-${data.priority}`;
+            priorityEl.textContent = formatPrio(data.priority);
+            priorityEl.title = `Priority: ${data.priority}. Click to cycle: Normal → High → Low`;
           }
           content = docType === 'info' ? (data.info || '') : (data.notes || '');
         }

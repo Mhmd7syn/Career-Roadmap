@@ -63,9 +63,11 @@ class TestPriorityRecommendation(unittest.TestCase):
         url = f"{self.base_url}{path}"
         try:
             with urllib.request.urlopen(url) as resp:
-                return resp.getcode(), json.loads(resp.read().decode("utf-8"))
+                raw = resp.read().decode("utf-8")
+                return resp.getcode(), (json.loads(raw) if raw.strip() else {})
         except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read().decode("utf-8"))
+            raw = e.read().decode("utf-8")
+            return e.code, (json.loads(raw) if raw.strip() else {})
 
     def test_parse_info_md_priority_extraction(self):
         handler = GraphRequestHandler.__new__(GraphRequestHandler)
@@ -302,13 +304,20 @@ class TestPriorityRecommendation(unittest.TestCase):
         self.assertIn(".next-node-priority-badge", css)
         self.assertIn(".badge-priority", css)
         self.assertIn(".child-priority-badge", css)
+        self.assertIn(".btn-priority-cycle", css)
         self.assertIn("priority-high", css)
         self.assertIn("priority-normal", css)
         self.assertIn("priority-low", css)
 
         self.assertIn("next-node-priority-badge", js)
         self.assertIn("child-priority-badge", js)
+        self.assertIn("btn-priority-toggle", js)
+        self.assertIn("setNodePriority", js)
         self.assertIn("poolCounts", js)
+
+    def test_favicon_endpoint(self):
+        code, _ = self._get("/favicon.ico")
+        self.assertEqual(code, 204)
 
 
 if __name__ == "__main__":
